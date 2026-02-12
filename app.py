@@ -9,27 +9,49 @@ st.set_page_config(page_title="Log Aktivitas", layout="wide", page_icon="📝")
 # CSS Kustom untuk Background Biru dan Card Putih
 st.markdown("""
     <style>
-    /* Mengubah background aplikasi menjadi Biru */
+    /* --- BAGIAN 1: LAYOUT UTAMA --- */
     .stApp {
-        background-color: #0033cc;
+        background-color: #0033cc; /* Warna Background Biru */
     }
     
-    /* Mengubah warna teks header agar kontras di dalam kotak putih */
-    h1, h2, h3, h4, h5, p, div, label, span {
-        color: #333333;
-    }
-    
-    /* Styling tombol agar lebih modern */
-    .stButton > button {
-        border-radius: 8px;
-        font-weight: bold;
-    }
-    
-    /* Menghilangkan padding bawaan yang berlebihan */
     .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
+
+    /* --- BAGIAN 2: TEKS & LABEL --- */
+    h1, h2, h3, h4, h5, p, div, span {
+        color: #000000 !important;
+    }
+    
+    label, .stDateInput label, .stSelectbox label, .stTextArea label {
+        color: #333333 !important;
+        font-weight: bold;
+    }
+
+    /* ============================================================ */
+    /* BAGIAN 3: WARNA TABEL & GRID (YANG ANDA MINTA)        */
+    /* ============================================================ */
+
+    /* A. Garis Pemisah (Grid) pada List dengan Tombol Edit */
+    hr {
+        /* Ubah #cccccc jadi #000000 (Hitam) atau #ff0000 (Merah) agar jelas */
+        border-top: 2px solid #cccccc !important; 
+        opacity: 1;
+    }
+
+    /* B. Grid untuk st.table (Jika dipakai) */
+    [data-testid="stTable"] {
+        border: 1px solid #333333 !important;
+    }
+    [data-testid="stTable"] th {
+        background-color: #f0f2f6 !important;
+        border-bottom: 2px solid #333333 !important;
+    }
+    [data-testid="stTable"] td {
+        border-bottom: 1px solid #cccccc !important;
+    }
+
     </style>
     """, unsafe_allow_html=True)
 

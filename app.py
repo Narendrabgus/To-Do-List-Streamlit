@@ -7,26 +7,40 @@ from datetime import datetime, date
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Log Aktivitas", layout="wide", page_icon="📝")
 
-# --- 2. CSS CUSTOM (FIXED BLUE THEME & HIDE HEADER) ---
+# --- 2. CSS CUSTOM (FIXED BLUE THEME, TRANSPARENT HEADER) ---
 st.markdown("""
     <style>
-    /* 1. SEMBUNYIKAN HEADER BAWAAN STREAMLIT (Kotak Putih Atas) */
+    /* 1. HEADER TRANSPARAN (Agar tombol menu tetap ada tapi kotak putih hilang) */
     [data-testid="stHeader"] {
+        background-color: rgba(0,0,0,0); /* Transparan */
+        color: white !important; /* Warna ikon menu jadi Putih */
+    }
+    
+    /* 2. HILANGKAN GARIS WARNA-WARNI (Decoration) */
+    [data-testid="stDecoration"] {
         display: none;
     }
     
-    /* 2. BACKGROUND UTAMA (Kunci ke Biru) */
+    /* 3. PAKSA IKON MENU JADI PUTIH (Agar terlihat di background biru) */
+    [data-testid="stHeader"] button {
+        color: white !important;
+    }
+    [data-testid="stHeader"] svg {
+        fill: white !important;
+    }
+    
+    /* 4. BACKGROUND UTAMA (Kunci ke Biru) */
     .stApp {
         background-color: #0033cc;
     }
     
-    /* 3. MENGURANGI JARAK ATAS (Padding) */
+    /* 5. MENGURANGI JARAK ATAS (Padding) */
     .block-container {
-        padding-top: 1rem; /* Jarak minimal dari atas */
+        padding-top: 3rem; /* Beri sedikit jarak agar judul tidak tertutup header transparan */
         padding-bottom: 2rem;
     }
 
-    /* 5. WARNA TEKS & LABEL (Kunci ke Hitam/Abu) */
+    /* 7. WARNA TEKS & LABEL (Kunci ke Hitam/Abu) */
     h1, h2, h3, h4, h5, p, div, span, li {
         color: #000000 !important;
     }
@@ -38,7 +52,7 @@ st.markdown("""
         color: #333333;
     }
 
-    /* 6. CSS KHUSUS TABEL LAPORAN (HTML) */
+    /* 8. CSS KHUSUS TABEL LAPORAN (HTML) */
     .report-table {
         width: 100%;
         border-collapse: collapse;
@@ -61,7 +75,6 @@ st.markdown("""
         background-color: #ffffff;
         color: #000000 !important;
     }
-    /* Item dalam sel */
     .cell-item {
         margin-bottom: 8px;
         border-bottom: 1px dashed #ddd;

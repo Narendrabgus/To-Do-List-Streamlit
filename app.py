@@ -7,21 +7,17 @@ from datetime import datetime, date
 # --- 1. KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="Log Aktivitas", layout="wide", page_icon="📝")
 
-# --- 2. CSS CUSTOM (FIXED BLUE THEME, TRANSPARENT HEADER) ---
+# --- 2. CSS CUSTOM ---
 st.markdown("""
     <style>
-    /* 1. HEADER TRANSPARAN (Agar tombol menu tetap ada tapi kotak putih hilang) */
+    /* HEADER TRANSPARAN */
     [data-testid="stHeader"] {
-        background-color: rgba(0,0,0,0); /* Transparan */
-        color: white !important; /* Warna ikon menu jadi Putih */
+        background-color: rgba(0,0,0,0);
+        color: white !important;
     }
-    
-    /* 2. HILANGKAN GARIS WARNA-WARNI (Decoration) */
     [data-testid="stDecoration"] {
         display: none;
     }
-    
-    /* 3. PAKSA IKON MENU JADI PUTIH (Agar terlihat di background biru) */
     [data-testid="stHeader"] button {
         color: white !important;
     }
@@ -29,18 +25,16 @@ st.markdown("""
         fill: white !important;
     }
     
-    /* 4. BACKGROUND UTAMA (Kunci ke Biru) */
+    /* THEME UTAMA */
     .stApp {
         background-color: #0033cc;
     }
-    
-    /* 5. MENGURANGI JARAK ATAS (Padding) */
     .block-container {
-        padding-top: 3rem; /* Beri sedikit jarak agar judul tidak tertutup header transparan */
+        padding-top: 3rem;
         padding-bottom: 2rem;
     }
 
-    /* 7. WARNA TEKS & LABEL (Kunci ke Hitam/Abu) */
+    /* TEKS & LABEL */
     h1, h2, h3, h4, h5, p, div, span, li {
         color: #000000 !important;
     }
@@ -51,43 +45,37 @@ st.markdown("""
     input, textarea, select {
         color: #333333;
     }
-
-    /* 8. CSS KHUSUS TABEL LAPORAN (HTML) */
-    .report-table {
+    
+    /* CSS UNTUK TOMBOL AKSI KECIL BERTUMPUK */
+    .stButton button {
+        padding: 0.2rem 0.5rem !important;
+        font-size: 0.8rem !important;
+        height: auto !important;
         width: 100%;
-        border-collapse: collapse;
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        color: #000;
-    }
-    .report-table th {
-        background-color: #9bc2e6; /* Header Biru Muda */
-        border: 1px solid #000000;
-        padding: 10px;
-        text-align: center;
-        font-weight: bold;
-        color: #000000 !important;
-    }
-    .report-table td {
-        border: 1px solid #000000;
-        padding: 8px;
-        vertical-align: top;
-        background-color: #ffffff;
-        color: #000000 !important;
-    }
-    .cell-item {
-        margin-bottom: 8px;
-        border-bottom: 1px dashed #ddd;
-        padding-bottom: 4px;
-    }
-    .cell-item:last-child {
-        border-bottom: none;
     }
     
-    /* Garis pemisah manual */
-    hr {
-        border-top: 2px solid #cccccc !important; 
-        opacity: 1;
+    /* GARIS PEMISAH ANTAR HARI */
+    .day-separator {
+        border-bottom: 2px solid #000;
+        margin-bottom: 1rem;
+    }
+    
+    /* STYLE HEADER TABEL CUSTOM */
+    .table-header {
+        font-weight: bold;
+        background-color: #9bc2e6;
+        padding: 10px;
+        border: 1px solid #000;
+        text-align: center;
+        color: #000;
+        margin-bottom: 5px;
+    }
+    
+    /* BORDER UNTUK SETIAP BARIS AKTIVITAS */
+    .activity-row {
+        border-bottom: 1px dashed #ccc;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -202,9 +190,8 @@ if not st.session_state['logged_in']:
 #           MAIN APP
 # ================================
 else:
-    # Sidebar Sederhana (Tanpa Toggle Dark Mode)
+    # Sidebar
     st.sidebar.title(f"Halo, {st.session_state['username']}")
-    
     if st.sidebar.button("Log Out"):
         st.session_state['logged_in'] = False
         st.session_state['username'] = ''
@@ -261,90 +248,93 @@ else:
                 if st.button("Batal Edit"):
                     st.session_state['edit_mode'] = False; st.session_state['data_to_edit'] = None; st.rerun()
 
-        # --- HALAMAN LAPORAN ---
+        # --- HALAMAN LAPORAN (TABEL HYBRID) ---
         elif choice == "Laporan & Filter":
             st.subheader("📊 Laporan Harian")
             
-            # Filter
+            # 1. Filter
             c1, c2 = st.columns(2)
             with c1: start_d = st.date_input("Dari", date(2025, 1, 1))
             with c2: end_d = st.date_input("Sampai", datetime.now())
             
-            # Ambil Data
+            # 2. Ambil Data
             raw_data = view_data_filtered(conn, st.session_state['username'], start_d, end_d)
             
+            # 3. Download Button
+            df_export = pd.DataFrame(raw_data, columns=['ID', 'Tanggal', 'Waktu', 'Uraian', 'Hasil'])
+            if not df_export.empty:
+                df_export['Tanggal'] = df_export['Tanggal'].apply(format_indo)
+                st.download_button("📥 Download Excel/CSV", df_export.to_csv(index=False).encode('utf-8'), f"Laporan_{date.today()}.csv", "text/csv")
+            
+            st.divider()
+
             if raw_data:
-                # Grouping Data
+                # Grouping Data per Hari
                 df = pd.DataFrame(raw_data, columns=['ID', 'Tanggal', 'Waktu', 'Uraian', 'Hasil'])
                 df['Tanggal_Indo'] = df['Tanggal'].apply(format_indo)
                 
-                grouped_df = df.groupby('Tanggal').agg({
-                    'Tanggal_Indo': 'first',
-                    'Waktu': list,
-                    'Uraian': list,
-                    'Hasil': list,
-                    'ID': list
-                }).sort_values('Tanggal', ascending=False).reset_index()
+                grouped = df.groupby('Tanggal_Indo', sort=False)
                 
-                # HTML Table Render
-                html_table = """
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 5%;">No</th>
-                            <th style="width: 20%;">Tanggal/Bulan</th>
-                            <th style="width: 40%;">Uraian Kegiatan</th>
-                            <th style="width: 15%;">Waktu</th>
-                            <th style="width: 20%;">Hasil</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                """
-                
-                for idx, row in grouped_df.iterrows():
-                    uraian_html = ""
-                    waktu_html = ""
-                    hasil_html = ""
-                    
-                    for i, (w, u, h) in enumerate(zip(row['Waktu'], row['Uraian'], row['Hasil'])):
-                        uraian_html += f'<div class="cell-item"><b>{i+1}.</b> {u}</div>'
-                        waktu_html += f'<div class="cell-item">{w}</div>'
-                        hasil_html += f'<div class="cell-item">{h}</div>'
-                    
-                    html_table += f"""
-                    <tr>
-                        <td style="text-align: center;">{idx + 1}</td>
-                        <td style="font-weight: bold;">{row['Tanggal_Indo']}</td>
-                        <td>{uraian_html}</td>
-                        <td style="text-align: center;">{waktu_html}</td>
-                        <td>{hasil_html}</td>
-                    </tr>
-                    """
-                html_table += "</tbody></table>"
-                
-                st.markdown(html_table, unsafe_allow_html=True)
-                
-                # Export Button
-                st.write("")
-                df_export = df.copy()
-                df_export['Tanggal'] = df_export['Tanggal_Indo']
-                st.download_button("📥 Download Excel/CSV", df_export.to_csv(index=False).encode('utf-8'), f"Laporan_{date.today()}.csv", "text/csv")
+                # --- HEADER TABEL MANUAL (Agar terlihat seperti tabel) ---
+                h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 3, 1])
+                h1.markdown('<div class="table-header">Tanggal</div>', unsafe_allow_html=True)
+                h2.markdown('<div class="table-header">Uraian Kegiatan</div>', unsafe_allow_html=True)
+                h3.markdown('<div class="table-header">Waktu</div>', unsafe_allow_html=True)
+                h4.markdown('<div class="table-header">Hasil</div>', unsafe_allow_html=True)
+                h5.markdown('<div class="table-header">Aksi</div>', unsafe_allow_html=True)
 
-                st.divider()
-                st.markdown("### 🛠️ Edit / Hapus Data")
-                
-                # Edit/Delete Management
-                for i, r in df.iterrows():
-                    with st.expander(f"{r['Tanggal_Indo']} - {r['Waktu']} - {r['Uraian'][:30]}..."):
-                        c_edit, c_del = st.columns([1, 1])
-                        if c_edit.button("✏️ Edit", key=f"e_{r['ID']}"):
-                            st.session_state['edit_mode'] = True
-                            st.session_state['data_to_edit'] = {'id': r['ID'], 'tanggal': r['Tanggal'], 'waktu': r['Waktu'], 'aktivitas': r['Uraian'], 'hasil': r['Hasil']}
-                            st.rerun()
-                        if c_del.button("🗑️ Hapus", key=f"d_{r['ID']}"):
-                            delete_data(conn, r['ID'])
-                            st.success("Terhapus")
-                            st.rerun()
+                # --- LOOPING DATA ---
+                for date_val, group in grouped:
+                    # Container untuk 1 Hari (Memberi batas border)
+                    with st.container():
+                        st.markdown("<hr style='margin: 0; border-top: 2px solid #000;'>", unsafe_allow_html=True)
+                        
+                        # Layout Utama: Kiri (Tanggal), Kanan (Daftar Aktivitas)
+                        col_date, col_content = st.columns([2, 9])
+                        
+                        # Kolom Kiri: TANGGAL (Hanya muncul sekali per grup)
+                        with col_date:
+                            st.write("") # Spacer agar turun dikit
+                            st.markdown(f"**{date_val}**")
+                        
+                        # Kolom Kanan: ROW AKTIVITAS
+                        with col_content:
+                            for idx, row in group.iterrows():
+                                # Kolom Rincian: Uraian | Waktu | Hasil | Aksi
+                                c_uraian, c_waktu, c_hasil, c_aksi = st.columns([3, 2, 3, 1])
+                                
+                                c_uraian.write(f"• {row['Uraian']}")
+                                c_waktu.write(row['Waktu'])
+                                c_hasil.write(f"• {row['Hasil']}")
+                                
+                                # --- KOLOM AKSI (TUMPUK VERTIKAL) ---
+                                with c_aksi:
+                                    # Tombol Edit (Icon Pensil)
+                                    if st.button("✏️", key=f"edit_{row['ID']}", help="Edit"):
+                                        st.session_state['edit_mode'] = True
+                                        st.session_state['data_to_edit'] = {
+                                            'id': row['ID'], 'tanggal': row['Tanggal'], 
+                                            'waktu': row['Waktu'], 'aktivitas': row['Uraian'], 
+                                            'hasil': row['Hasil']
+                                        }
+                                        st.rerun()
+                                    
+                                    # Tombol Hapus (Icon Sampah)
+                                    if st.button("🗑️", key=f"del_{row['ID']}", help="Hapus"):
+                                        st.session_state[f'confirm_del_{row["ID"]}'] = True
+                                    
+                                    # Konfirmasi Hapus (Muncul di bawah tombol jika diklik)
+                                    if st.session_state.get(f'confirm_del_{row["ID"]}'):
+                                        if st.button("Y", key=f"y_{row['ID']}", help="Ya, Hapus"):
+                                            delete_data(conn, row['ID'])
+                                            st.rerun()
+                                        if st.button("X", key=f"n_{row['ID']}", help="Batal"):
+                                            st.session_state[f'confirm_del_{row["ID"]}'] = False
+                                            st.rerun()
+                                
+                                # Garis putus-putus antar aktivitas dalam satu hari
+                                st.markdown("<div class='activity-row'></div>", unsafe_allow_html=True)
+
             else:
                 st.info("Belum ada data.")
 

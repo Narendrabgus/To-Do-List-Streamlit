@@ -1,0 +1,13 @@
+Cara Memberikan ke Client (Deployment): Client minta "Link", bukan file coding.
+
+Upload folder projek Anda (app.py dan requirements.txt) ke GitHub.
+
+Buka share.streamlit.io (Login dengan akun GitHub Anda).
+
+Klik "New App" -> Pilih repository GitHub yang baru Anda buat.
+
+Klik "Deploy".
+
+Tunggu sebentar, Streamlit akan memberikan URL (misal: https://projek-kegiatan-anda.streamlit.app).
+
+Kirim URL tersebut ke Client. Client bisa buka di HP atau Laptop tanpa install apapun.

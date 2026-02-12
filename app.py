@@ -14,15 +14,6 @@ st.markdown("""
         background-color: #0033cc;
     }
     
-    /* Membuat container putih di tengah (Card Style) */
-    .main-container {
-        background-color: white;
-        padding: 2rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-top: 2rem;
-    }
-    
     /* Mengubah warna teks header agar kontras di dalam kotak putih */
     h1, h2, h3, h4, h5, p, div, label, span {
         color: #333333;

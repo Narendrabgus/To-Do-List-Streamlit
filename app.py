@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import hashlib
+import io
+import xlsxwriter
 from datetime import datetime, date
 
 # --- 1. KONFIGURASI HALAMAN ---
@@ -95,6 +97,51 @@ def format_indo(tgl_str):
         bulan_dict = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
         return f"{hari_dict[tgl_obj.strftime('%A')]}, {tgl_obj.day} {bulan_dict[tgl_obj.month]} {tgl_obj.year}"
     except: return tgl_str
+
+# --- FUNGSI BARU: GENERATE EXCEL RAPI ---
+def generate_excel(df):
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet('Laporan')
+
+    # Format Header (Biru Muda, Tebal, Border)
+    header_fmt = workbook.add_format({
+        'bold': True, 'font_color': '#000000', 'bg_color': '#9bc2e6',
+        'border': 1, 'align': 'center', 'valign': 'vcenter'
+    })
+    
+    # Format Isi (Wrap Text, Top Align)
+    body_fmt = workbook.add_format({
+        'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'left'
+    })
+    
+    # Format Tengah (Tanggal/Waktu)
+    center_fmt = workbook.add_format({
+        'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'center'
+    })
+
+    # Tulis Header
+    headers = ['ID', 'Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']
+    for col, h in enumerate(headers):
+        worksheet.write(0, col, h, header_fmt)
+
+    # Tulis Data
+    for row, data in enumerate(df.values):
+        worksheet.write(row+1, 0, data[0], center_fmt)     # ID
+        worksheet.write(row+1, 1, str(data[1]), center_fmt) # Tanggal
+        worksheet.write(row+1, 2, data[2], center_fmt)     # Waktu
+        worksheet.write(row+1, 3, data[3], body_fmt)       # Uraian
+        worksheet.write(row+1, 4, data[4], body_fmt)       # Hasil
+
+    # Atur Lebar Kolom
+    worksheet.set_column('A:A', 5)
+    worksheet.set_column('B:B', 25)
+    worksheet.set_column('C:C', 15)
+    worksheet.set_column('D:D', 50)
+    worksheet.set_column('E:E', 30)
+
+    workbook.close()
+    return output.getvalue()
 
 # --- 4. DATABASE FUNCTION ---
 def init_db():
@@ -260,11 +307,20 @@ else:
             # 2. Ambil Data
             raw_data = view_data_filtered(conn, st.session_state['username'], start_d, end_d)
             
-            # 3. Download Button
+            # 3. Download Button (MENGGUNAKAN EXCEL RAPI)
             df_export = pd.DataFrame(raw_data, columns=['ID', 'Tanggal', 'Waktu', 'Uraian', 'Hasil'])
             if not df_export.empty:
                 df_export['Tanggal'] = df_export['Tanggal'].apply(format_indo)
-                st.download_button("📥 Download Excel/CSV", df_export.to_csv(index=False).encode('utf-8'), f"Laporan_{date.today()}.csv", "text/csv")
+                
+                # Generate Excel
+                excel_data = generate_excel(df_export)
+                
+                st.download_button(
+                    label="📥 Download Laporan (Excel .xlsx)",
+                    data=excel_data,
+                    file_name=f"Laporan_{st.session_state['username']}_{date.today()}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
             
             st.divider()
 
@@ -275,7 +331,7 @@ else:
                 
                 grouped = df.groupby('Tanggal_Indo', sort=False)
                 
-                # --- HEADER TABEL MANUAL (Agar terlihat seperti tabel) ---
+                # --- HEADER TABEL MANUAL ---
                 h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 3, 1])
                 h1.markdown('<div class="table-header">Tanggal</div>', unsafe_allow_html=True)
                 h2.markdown('<div class="table-header">Uraian Kegiatan</div>', unsafe_allow_html=True)
@@ -285,22 +341,16 @@ else:
 
                 # --- LOOPING DATA ---
                 for date_val, group in grouped:
-                    # Container untuk 1 Hari (Memberi batas border)
                     with st.container():
                         st.markdown("<hr style='margin: 0; border-top: 2px solid #000;'>", unsafe_allow_html=True)
-                        
-                        # Layout Utama: Kiri (Tanggal), Kanan (Daftar Aktivitas)
                         col_date, col_content = st.columns([2, 9])
                         
-                        # Kolom Kiri: TANGGAL (Hanya muncul sekali per grup)
                         with col_date:
-                            st.write("") # Spacer agar turun dikit
+                            st.write("") 
                             st.markdown(f"**{date_val}**")
                         
-                        # Kolom Kanan: ROW AKTIVITAS
                         with col_content:
                             for idx, row in group.iterrows():
-                                # Kolom Rincian: Uraian | Waktu | Hasil | Aksi
                                 c_uraian, c_waktu, c_hasil, c_aksi = st.columns([3, 2, 3, 1])
                                 
                                 c_uraian.write(f"• {row['Uraian']}")
@@ -309,7 +359,6 @@ else:
                                 
                                 # --- KOLOM AKSI (TUMPUK VERTIKAL) ---
                                 with c_aksi:
-                                    # Tombol Edit (Icon Pensil)
                                     if st.button("✏️", key=f"edit_{row['ID']}", help="Edit"):
                                         st.session_state['edit_mode'] = True
                                         st.session_state['data_to_edit'] = {
@@ -319,22 +368,17 @@ else:
                                         }
                                         st.rerun()
                                     
-                                    # Tombol Hapus (Icon Sampah)
                                     if st.button("🗑️", key=f"del_{row['ID']}", help="Hapus"):
                                         st.session_state[f'confirm_del_{row["ID"]}'] = True
                                     
-                                    # Konfirmasi Hapus (Muncul di bawah tombol jika diklik)
                                     if st.session_state.get(f'confirm_del_{row["ID"]}'):
-                                        if st.button("Y", key=f"y_{row['ID']}", help="Ya, Hapus"):
+                                        if st.button("Y", key=f"y_{row['ID']}"):
                                             delete_data(conn, row['ID'])
                                             st.rerun()
-                                        if st.button("X", key=f"n_{row['ID']}", help="Batal"):
+                                        if st.button("X", key=f"n_{row['ID']}"):
                                             st.session_state[f'confirm_del_{row["ID"]}'] = False
                                             st.rerun()
-                                
-                                # Garis putus-putus antar aktivitas dalam satu hari
                                 st.markdown("<div class='activity-row'></div>", unsafe_allow_html=True)
-
             else:
                 st.info("Belum ada data.")
 

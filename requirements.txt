@@ -1,3 +1,4 @@
 streamlit
 pandas
-XlsxWriter
+xlsxwriter
+st-gsheets-connection

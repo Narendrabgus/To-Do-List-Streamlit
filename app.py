@@ -77,9 +77,16 @@ def load_logs():
 def load_users():
     conn = get_conn()
     try:
-        return conn.read(worksheet="users", ttl=0)
-    except:
-        return pd.DataFrame(columns=["username", "password"])
+        # Coba baca data
+        df = conn.read(worksheet="users", ttl=0)
+        # Pastikan kolom yang dibutuhkan ada
+        if 'username' not in df.columns or 'password' not in df.columns:
+            return pd.DataFrame(columns=["username", "password"])
+        return df
+    except Exception as e:
+        # PENTING: Jika error koneksi, return None (JANGAN return kosong)
+        # Agar fungsi seeding tidak salah paham.
+        return None
 
 # Tambah Data Log
 def add_data(user, tanggal, waktu, aktivitas, hasil):
@@ -174,8 +181,17 @@ def count_activity_per_day(user, tanggal):
 # Seed Users (Hanya dijalankan sekali jika tabel kosong)
 def seed_users_gsheet():
     df_users = load_users()
-    if df_users.empty:
-        default_users = ["Elisa Luhulima", "Ahmad Sobirin", "Dewi Puspita Sari", "Anni Samudra Wulan", "Nafi Alrasyid", "Muhamad Ichsan Kamil", "Oscar Gideon", "Rafael Yolens Putera Larung", "Izzat Nabela Ali", "Katrin Dian Lestari", "Diah", "Gary", "Rika"]
+    
+    # PENGAMAN 1: Jika gagal load (None), jangan lakukan apa-apa.
+    if df_users is None:
+        return
+
+    # PENGAMAN 2: Hanya seed jika BENAR-BENAR kosong (baris 0)
+    if df_users.empty or len(df_users) == 0:
+        default_users = ["Elisa Luhulima", "Ahmad Sobirin", "Dewi Puspita Sari", 
+                         "Anni Samudra Wulan", "Nafi Alrasyid", "Muhamad Ichsan Kamil", 
+                         "Oscar Gideon", "Rafael Yolens Putera Larung", "Izzat Nabela Ali", 
+                         "Katrin Dian Lestari", "Diah", "Gary", "Rika"]
         pass_hash = make_hashes("123456")
         
         new_data = []
@@ -183,7 +199,12 @@ def seed_users_gsheet():
             new_data.append({"username": u, "password": pass_hash})
         
         conn = get_conn()
-        conn.update(worksheet="users", data=pd.DataFrame(new_data))
+        # Gunakan try-except saat update untuk mencegah crash
+        try:
+            conn.update(worksheet="users", data=pd.DataFrame(new_data))
+            st.toast("Database User berhasil di-inisialisasi!", icon="✅")
+        except:
+            pass
 
 # --- SESSION & INIT ---
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False

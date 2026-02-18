@@ -46,84 +46,125 @@ def count_activity_per_day(conn, user, tanggal):
     c.execute("SELECT COUNT(*) FROM logs WHERE user=? AND tanggal=?", (user, tanggal))
     return c.fetchone()[0]
 
+# --- FUNGSI EXCEL (DIPERBARUI: MERGE CELLS) ---
 def generate_excel(df):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     worksheet = workbook.add_worksheet('Laporan')
 
+    # Format Header
     header_fmt = workbook.add_format({
-        'bold': True,
-        'font_color': '#000000',
-        'bg_color': '#9bc2e6',
-        'border': 1,
-        'align': 'center',
-        'valign': 'vcenter'
+        'bold': True, 'font_color': '#000000', 'bg_color': '#9bc2e6',
+        'border': 1, 'align': 'center', 'valign': 'vcenter'
     })
-
+    
+    # Format Isi Biasa (Rata Kiri, Wrap Text)
     body_fmt = workbook.add_format({
-        'text_wrap': True,
-        'border': 1,
-        'valign': 'top',
-        'align': 'left'
+        'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'left'
     })
-
+    
+    # Format Tengah (ID, Waktu)
     center_fmt = workbook.add_format({
-        'text_wrap': True,
-        'border': 1,
-        'valign': 'top',
-        'align': 'center'
+        'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'center'
     })
 
+    # Format Tanggal (Tengah Vertical & Horizontal) - Khusus untuk Merge
+    date_merge_fmt = workbook.add_format({
+        'text_wrap': True, 'border': 1, 'valign': 'vcenter', 'align': 'center'
+    })
+
+    # Tulis Header
     headers = ['ID', 'Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']
     for col, h in enumerate(headers):
         worksheet.write(0, col, h, header_fmt)
 
-    for row, data in enumerate(df.values):
-        worksheet.write(row+1, 0, data[0], center_fmt)
-        worksheet.write(row+1, 1, str(data[1]), center_fmt)
-        worksheet.write(row+1, 2, data[2], center_fmt)
-        worksheet.write(row+1, 3, data[3], body_fmt)
-        worksheet.write(row+1, 4, data[4], body_fmt)
+    # --- LOGIKA BARU: GROUPING & MERGING ---
+    # Kita kelompokkan data berdasarkan Tanggal agar tahu mana yang harus di-merge
+    grouped = df.groupby('Tanggal', sort=False)
+    
+    current_row = 1 # Mulai dari baris ke-2 (index 1) karena baris 0 adalah header
 
-    worksheet.set_column('A:A', 5)
-    worksheet.set_column('B:B', 25)
-    worksheet.set_column('C:C', 15)
-    worksheet.set_column('D:D', 50)
-    worksheet.set_column('E:E', 30)
+    for date_val, group in grouped:
+        num_rows = len(group)
+        first_row = current_row
+        last_row = current_row + num_rows - 1
+        
+        # 1. TULIS KOLOM TANGGAL (MERGED JIKA PERLU)
+        if num_rows > 1:
+            # Jika ada lebih dari 1 aktivitas di hari yang sama, gabungkan sel (Merge)
+            # Kolom Tanggal ada di index 1 (Kolom B)
+            worksheet.merge_range(first_row, 1, last_row, 1, str(date_val), date_merge_fmt)
+        else:
+            # Jika cuma 1 aktivitas, tulis biasa
+            worksheet.write(first_row, 1, str(date_val), center_fmt)
+
+        # 2. TULIS SISA KOLOM (ID, Waktu, Uraian, Hasil)
+        # Loop untuk setiap baris dalam grup tanggal tersebut
+        for _, row_data in group.iterrows():
+            # Kolom 0: ID
+            worksheet.write(current_row, 0, row_data['ID'], center_fmt)
+            # Kolom 1: Tanggal (Sudah dihandle di atas)
+            # Kolom 2: Waktu
+            worksheet.write(current_row, 2, row_data['Waktu'], center_fmt)
+            # Kolom 3: Uraian
+            worksheet.write(current_row, 3, row_data['Uraian'], body_fmt)
+            # Kolom 4: Hasil
+            worksheet.write(current_row, 4, row_data['Hasil'], body_fmt)
+            
+            current_row += 1
+
+    # Atur Lebar Kolom
+    worksheet.set_column('A:A', 5)  # ID
+    worksheet.set_column('B:B', 25) # Tanggal
+    worksheet.set_column('C:C', 15) # Waktu
+    worksheet.set_column('D:D', 50) # Uraian
+    worksheet.set_column('E:E', 30) # Hasil
 
     workbook.close()
     return output.getvalue()
 
-# --- DATABASE ---
+# --- DATABASE FUNCTIONS ---
 def init_db():
     conn = sqlite3.connect('kegiatan.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user TEXT,
-            tanggal DATE,
-            waktu TEXT,
-            aktivitas TEXT,
-            hasil TEXT
+            user TEXT, tanggal DATE, waktu TEXT, aktivitas TEXT, hasil TEXT
         )
     ''')
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password TEXT
+            username TEXT PRIMARY KEY, password TEXT
         )
     ''')
     conn.commit()
     return conn
 
-def seed_default_user(conn):
+def create_user(conn, username, password):
     c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE username=?", ("admin",))
-    if not c.fetchone():
-        c.execute("INSERT INTO users(username,password) VALUES (?,?)",
-                  ("admin", make_hashes("123456")))
+    try:
+        c.execute('INSERT INTO users(username, password) VALUES (?,?)', (username, password))
         conn.commit()
+        return True
+    except:
+        return False 
+
+def seed_users(conn):
+    default_users = [
+        "Elisa Luhulima", "Ahmad Sobirin", "Dewi Puspita Sari", 
+        "Anni Samudra Wulan", "Nafi Alrasyid", "Muhamad Ichsan Kamil", 
+        "Oscar Gideon", "Rafael Yolens Putera Larung", "Izzat Nabela Ali", 
+        "Katrin Dian Lestari", "Diah", "Gary", "Rika"
+    ]
+    default_pass = make_hashes("123456") 
+    
+    c = conn.cursor()
+    for user in default_users:
+        c.execute('SELECT * FROM users WHERE username = ?', (user,))
+        if not c.fetchone():
+            c.execute('INSERT INTO users(username, password) VALUES (?,?)', (user, default_pass))
+    conn.commit()
 
 def login_user(conn, username):
     c = conn.cursor()
@@ -146,31 +187,58 @@ def view_data_filtered(conn, user, start_date, end_date):
     """, (user, start_date, end_date))
     return c.fetchall()
 
-# --- SESSION ---
+# --- SESSION & INIT ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state:
     st.session_state['username'] = ''
+if 'jumlah_input' not in st.session_state:
+    st.session_state['jumlah_input'] = 1
 
 conn = init_db()
-seed_default_user(conn)
+seed_users(conn)
 
-# ================= LOGIN =================
+# ================= LOGIN / SIGN UP =================
 if not st.session_state['logged_in']:
-    st.title("🔐 Login Sistem")
-    u_in = st.text_input("Username")
-    p_in = st.text_input("Password", type="password")
+    st.title("🔐 Sistem Pencatatan Kegiatan")
+    
+    tab1, tab2 = st.tabs(["Masuk (Login)", "Daftar Akun Baru"])
 
-    if st.button("Masuk"):
-        user_data = login_user(conn, u_in)
-        if user_data and user_data[1] == make_hashes(p_in):
-            st.session_state['logged_in'] = True
-            st.session_state['username'] = u_in
-            st.rerun()
-        else:
-            st.error("Login Gagal.")
+    with tab1:
+        st.subheader("Login Pengguna")
+        st.info("Password Default user lama: 123456")
+        u_in = st.text_input("Username", key="login_user")
+        p_in = st.text_input("Password", type="password", key="login_pass")
 
-# ================= MAIN =================
+        if st.button("Masuk"):
+            user_data = login_user(conn, u_in)
+            if user_data and user_data[1] == make_hashes(p_in):
+                st.session_state['logged_in'] = True
+                st.session_state['username'] = u_in
+                st.rerun()
+            else:
+                st.error("Username atau Password salah.")
+
+    with tab2:
+        st.subheader("Buat Akun Baru")
+        new_u = st.text_input("Username Baru", key="signup_user")
+        new_p = st.text_input("Password Baru", type="password", key="signup_pass")
+        new_p_confirm = st.text_input("Ulangi Password", type="password", key="signup_pass_confirm")
+        
+        if st.button("Daftar"):
+            if new_p and new_p_confirm:
+                if new_p == new_p_confirm:
+                    hashed_new_pass = make_hashes(new_p)
+                    if create_user(conn, new_u, hashed_new_pass):
+                        st.success(f"Akun '{new_u}' berhasil dibuat! Silakan pindah ke tab 'Masuk' untuk login.")
+                    else:
+                        st.warning("Username tersebut sudah digunakan. Coba nama lain.")
+                else:
+                    st.error("Password tidak cocok.")
+            else:
+                st.error("Mohon lengkapi semua kolom.")
+
+# ================= MAIN APPLICATION =================
 else:
     st.sidebar.title(f"Halo, {st.session_state['username']}")
     if st.sidebar.button("Log Out"):
@@ -181,29 +249,67 @@ else:
     menu = ["Input Aktivitas", "Laporan & Filter"]
     choice = st.sidebar.radio("Navigasi", menu)
 
+    # ---------------- PAGE INPUT AKTIVITAS ----------------
     if choice == "Input Aktivitas":
         st.title("📝 Input Aktivitas")
 
-        with st.form("form_input"):
-            tgl = st.date_input("Tanggal", datetime.now())
-            akt = st.text_area("Uraian Kegiatan")
-            hsl = st.text_area("Hasil / Output")
+        tgl = st.date_input("Pilih Tanggal", datetime.now())
+        user = st.session_state['username']
 
-            if st.form_submit_button("Simpan"):
-                if akt and hsl:
-                    user = st.session_state['username']
-                    count = count_activity_per_day(conn, user, tgl)
+        existing_count = count_activity_per_day(conn, user, tgl)
+        sisa_slot = len(TIME_SLOTS) - existing_count
 
-                    if count < len(TIME_SLOTS):
-                        auto_waktu = TIME_SLOTS[count]
-                        add_data(conn, user, tgl, auto_waktu, akt, hsl)
-                        st.success(f"Tersimpan di slot {auto_waktu}")
+        if sisa_slot <= 0:
+            st.warning("⚠️ Semua slot waktu (4 slot) untuk tanggal ini sudah terisi penuh.")
+        else:
+            col_add, col_info = st.columns([1, 4])
+            with col_add:
+                if st.button("➕ Tambah Baris"):
+                    if st.session_state['jumlah_input'] < sisa_slot:
+                        st.session_state['jumlah_input'] += 1
+                    else:
+                        st.toast("Maksimal input tercapai sesuai slot tersisa!", icon="🚫")
+            with col_info:
+                st.caption(f"Slot terisi di DB: {existing_count}. Sisa slot tersedia: {sisa_slot}.")
+
+            st.write("---")
+
+            with st.form("form_dynamic"):
+                jumlah_render = min(st.session_state['jumlah_input'], sisa_slot)
+                data_to_save = []
+
+                for i in range(jumlah_render):
+                    slot_index = existing_count + i
+                    jam_otomatis = TIME_SLOTS[slot_index]
+
+                    st.markdown(f"**Input ke-{i+1} (Slot: {jam_otomatis})**")
+                    akt = st.text_area("Uraian Kegiatan", key=f"akt_{i}")
+                    hsl = st.text_area("Hasil / Output", key=f"hsl_{i}")
+                    
+                    data_to_save.append({
+                        "waktu": jam_otomatis,
+                        "aktivitas": akt,
+                        "hasil": hsl
+                    })
+                    st.markdown("---")
+
+                submitted = st.form_submit_button("Simpan Semua Data")
+                
+                if submitted:
+                    saved_count = 0
+                    for item in data_to_save:
+                        if item['aktivitas'] and item['hasil']:
+                            add_data(conn, user, tgl, item['waktu'], item['aktivitas'], item['hasil'])
+                            saved_count += 1
+                    
+                    if saved_count > 0:
+                        st.success(f"Berhasil menyimpan {saved_count} aktivitas!")
+                        st.session_state['jumlah_input'] = 1
                         st.rerun()
                     else:
-                        st.error("Slot waktu hari ini sudah penuh (4 aktivitas).")
-                else:
-                    st.error("Lengkapi semua field.")
+                        st.error("Mohon isi Uraian dan Hasil setidaknya pada satu data.")
 
+    # ---------------- PAGE LAPORAN ----------------
     elif choice == "Laporan & Filter":
         st.title("📊 Laporan")
 
@@ -213,19 +319,17 @@ else:
         with c2:
             end_d = st.date_input("Sampai", datetime.now())
 
-        raw = view_data_filtered(conn,
-                                 st.session_state['username'],
-                                 start_d, end_d)
-
-        df = pd.DataFrame(raw,
-                          columns=['ID','Tanggal','Waktu','Uraian','Hasil'])
+        raw = view_data_filtered(conn, st.session_state['username'], start_d, end_d)
+        df = pd.DataFrame(raw, columns=['ID','Tanggal','Waktu','Uraian','Hasil'])
 
         if not df.empty:
             df['Tanggal'] = df['Tanggal'].apply(format_indo)
+            
+            # Panggil fungsi generate_excel yang baru (dengan Merge Cells)
             excel_data = generate_excel(df)
 
             st.download_button(
-                "📥 Download Laporan (Excel)",
+                "📥 Download Laporan (Excel Merged)",
                 data=excel_data,
                 file_name=f"Laporan_{st.session_state['username']}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

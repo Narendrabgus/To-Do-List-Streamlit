@@ -72,8 +72,7 @@ def generate_excel(df):
     return output.getvalue()
 
 # --- 4. LOAD ASSETS ---
-# bg_ombudsman tidak lagi dipakai sebagai background utama, tapi dibiarkan agar tidak error jika dipanggil
-bg_ombudsman = get_img_as_base64("GambarOmbudsman.jpeg") 
+bg_ombudsman = get_img_as_base64("download.jpg") 
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
 logo_udinus = get_img_as_base64("LogoUdinus.png")
 
@@ -86,16 +85,18 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* 1. BACKGROUND UTAMA (Warna Biru Solid) */
-    /* KITA UBAH BAGIAN INI */
+    /* 1. BACKGROUND UTAMA */
     .stApp {{
-        background-image: none !important; /* Hapus gambar */
-        background-color: #1A73E8 !important; /* Ganti dengan warna biru */
+        background-image: url("data:image/jpeg;base64,{bg_ombudsman}");
+        background-size: cover; 
+        background-position: center center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }}
 
     /* 2. SIDEBAR BACKGROUND */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.55) !important;
+        background-color: rgba(255, 255, 255, 0.95) !important;
     }}
     [data-testid="stSidebar"]::before {{
         content: ""; position: absolute; top: 50%; left: 50%;
@@ -107,27 +108,34 @@ st.markdown(f"""
         pointer-events: none; 
     }}
 
-    /* 3. CONTAINER BOX (Background putih solid/transparan) */
-    [data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: rgba(255, 255, 255, 0.95) !important; /* Putih 95% */
-        border-radius: 15px !important;
+    /* 3. CONTAINER PUTIH (PENTING: DIBUAT LEBIH TEBAL/SOLID) */
+    /* Target elemen container border=True */
+    div[data-testid="stVerticalBlockBorderWrapper"] {{
+        background-color: rgba(255, 255, 255, 0.95) !important; /* Putih 95% Solid */
         padding: 2rem !important;
-        border: 1px solid rgba(0, 0, 0, 0.1) !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
-    }}
-    
-    /* Memastikan semua teks di dalam container berwarna HITAM */
-    [data-testid="stVerticalBlockBorderWrapper"] * {{
-        color: black !important;
+        border-radius: 15px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+        border: 1px solid rgba(200, 200, 200, 0.5) !important;
+        margin-bottom: 2rem;
     }}
 
-    /* Styling Input Field */
-    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {{
-        background-color: #ffffff !important;
+    /* Memastikan teks di dalam container berwarna hitam */
+    div[data-testid="stVerticalBlockBorderWrapper"] p, 
+    div[data-testid="stVerticalBlockBorderWrapper"] h1, 
+    div[data-testid="stVerticalBlockBorderWrapper"] h2, 
+    div[data-testid="stVerticalBlockBorderWrapper"] h3,
+    div[data-testid="stVerticalBlockBorderWrapper"] label,
+    div[data-testid="stVerticalBlockBorderWrapper"] div {{
         color: #000000 !important;
-        border: 1px solid #ccc !important;
     }}
     
+    /* Perbaikan Input Field agar terlihat jelas di background putih */
+    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
+        background-color: #f0f2f6 !important; /* Abu-abu sangat muda */
+        color: #000000 !important; /* Teks input hitam */
+        border: 1px solid #ccc !important;
+    }}
+
     /* 4. WATERMARK UDINUS */
     .watermark-container {{
         position: fixed;
@@ -250,11 +258,9 @@ seed_users_gsheet()
 
 # ================= LOGIN / SIGN UP =================
 if not st.session_state['logged_in']:
-    # Menggunakan Layout Kolom untuk menengahkan Form Login
-    c1, c2, c3 = st.columns([1, 2, 1])
-    
-    with c2:
-        # PENTING: Container ini yang akan diberi background putih oleh CSS
+    col_center = st.columns([1, 8, 1])
+    with col_center[1]:
+        # KOTAK PUTIH: Dengan border=True, style CSS diatas akan otomatis membungkus ini
         with st.container(border=True):
             st.title("LKPKT") 
             st.markdown("### Laporan Kinerja & Pencatatan Kegiatan Harian")
@@ -291,8 +297,9 @@ else:
     menu = ["Input Aktivitas", "Laporan & Filter"]
     choice = st.sidebar.radio("Navigasi", menu)
 
-    # CONTAINER UTAMA UNTUK ISI APLIKASI
+    # KOTAK PUTIH UNTUK KONTEN UTAMA
     with st.container(border=True):
+
         if choice == "Input Aktivitas":
             if st.session_state['edit_mode']:
                 st.title("✏️ Edit Aktivitas")

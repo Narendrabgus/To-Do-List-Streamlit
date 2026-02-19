@@ -96,7 +96,7 @@ st.markdown(f"""
 
     /* 2. SIDEBAR BACKGROUND */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.95) !important;
+        background-color: rgba(255, 255, 255, 0.55) !important;
     }}
     [data-testid="stSidebar"]::before {{
         content: ""; position: absolute; top: 50%; left: 50%;

@@ -139,10 +139,10 @@ st.markdown(f"""
         bottom: 0;
         left: 0;
         width: 100%;
-        background-color: rgba(0, 0, 0, 0.8); /* Background gelap agar teks selalu terbaca */
+        background-color: rgba(0, 0, 0, 0.8);
         text-align: center; 
         padding: 12px 0;
-        z-index: 99999; /* Selalu di paling depan */
+        z-index: 99999; 
         border-top: 1px solid rgba(255,255,255,0.2); 
     }}
     
@@ -153,6 +153,19 @@ st.markdown(f"""
         line-height: 1.6;
         margin: 0;
     }}
+
+    /* Style khusus untuk nama yang bisa diklik */
+    .footer-link {{
+        color: rgba(255, 255, 255, 0.9) !important;
+        text-decoration: none; /* Menghilangkan garis bawah default */
+        font-weight: bold;
+        transition: color 0.2s ease-in-out;
+    }}
+
+    .footer-link:hover {{
+        color: #4da6ff !important; /* Berubah menjadi biru muda saat disentuh mouse */
+        text-decoration: underline; /* Muncul garis bawah saat disentuh */
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -161,7 +174,9 @@ st.markdown("""
     <div class="footer-container">
         <div class="footer-text">
             <b>Developed by:</b><br>
-            Muhammad Narendra Bagus Nurseto | Lanangku Kawitan Hafidl Putranto | Reynaldi Saputra
+            <a href="https://www.instagram.com/narendraa.baguss?igsh=M2UyY2MwdHc5cWo4" target="_blank" class="footer-link">Muhammad Narendra Bagus Nurseto</a> | 
+            <a href="https://www.instagram.com/hafidputranto_?igsh=MWk3bDZyMm56dWF0OA==" target="_blank" class="footer-link">Lanangku Kawitan Hafidl Putranto</a> | 
+            <a href="https://www.instagram.com/renaldy.sa?igsh=aHJuZTJzMTY1eDA4" target="_blank" class="footer-link">Reynaldi Saputra</a>
         </div>
     </div>
 """, unsafe_allow_html=True)

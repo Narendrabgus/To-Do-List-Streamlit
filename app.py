@@ -96,7 +96,7 @@ st.markdown(f"""
 
     /* 2. SIDEBAR BACKGROUND */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.5) !important;
+        background-color: rgba(255, 255, 255, 0.95) !important;
     }}
     [data-testid="stSidebar"]::before {{
         content: ""; position: absolute; top: 50%; left: 50%;
@@ -151,6 +151,10 @@ st.markdown(f"""
         z-index: 9999;
         border: 1px solid #ddd;
     }}
+    .watermark-logo {{
+        width: 35px;
+        height: auto;
+    }}
     .watermark-text {{
         font-family: 'Arial', sans-serif;
         font-size: 12px;
@@ -165,7 +169,7 @@ st.markdown(f"""
 st.markdown(f"""
     <div class="watermark-container">
         <img src="data:image/png;base64,{logo_udinus}" class="watermark-logo">
-        <span class="watermark-text">Created By Muhammad Narendra Bagus Nurseto & Lanangku Kawitan Hafidl Putranto</span>
+        <span class="watermark-text">Universitas Dian Nuswantoro</span>
     </div>
 """, unsafe_allow_html=True)
 

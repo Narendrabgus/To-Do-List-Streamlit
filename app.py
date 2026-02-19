@@ -74,7 +74,6 @@ def generate_excel(df):
 # --- 4. LOAD ASSETS ---
 bg_ombudsman = get_img_as_base64("BYD.jpg") 
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
-logo_udinus = get_img_as_base64("LogoUdinus.png")
 
 # --- CSS CUSTOM STYLE ---
 st.markdown(f"""
@@ -108,18 +107,17 @@ st.markdown(f"""
         pointer-events: none; 
     }}
 
-    /* 3. CONTAINER PUTIH (PENTING: DIBUAT LEBIH TEBAL/SOLID) */
-    /* Target elemen container border=True */
+    /* 3. CONTAINER PUTIH */
     div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: rgba(255, 255, 255, 0.95) !important; /* Putih 95% Solid */
+        background-color: rgba(255, 255, 255, 0.95) !important; 
         padding: 2rem !important;
         border-radius: 15px !important;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
         border: 1px solid rgba(200, 200, 200, 0.5) !important;
-        margin-bottom: 2rem;
+        /* Margin bawah diperbesar agar form tidak tertutup footer */
+        margin-bottom: 80px !important; 
     }}
 
-    /* Memastikan teks di dalam container berwarna hitam */
     div[data-testid="stVerticalBlockBorderWrapper"] p, 
     div[data-testid="stVerticalBlockBorderWrapper"] h1, 
     div[data-testid="stVerticalBlockBorderWrapper"] h2, 
@@ -129,47 +127,42 @@ st.markdown(f"""
         color: #000000 !important;
     }}
     
-    /* Perbaikan Input Field agar terlihat jelas di background putih */
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-        background-color: #f0f2f6 !important; /* Abu-abu sangat muda */
-        color: #000000 !important; /* Teks input hitam */
+        background-color: #f0f2f6 !important; 
+        color: #000000 !important; 
         border: 1px solid #ccc !important;
     }}
 
-    /* 4. WATERMARK UDINUS */
-    .watermark-container {{
+    /* 4. FOOTER NAMA */
+    .footer-container {{
         position: fixed;
-        bottom: 15px;
-        right: 15px;
-        background-color: rgba(255, 255, 255, 0.9);
-        padding: 8px 15px;
-        border-radius: 50px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        z-index: 9999;
-        border: 1px solid #ddd;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(0, 0, 0, 0.8); /* Background gelap agar teks selalu terbaca */
+        text-align: center; 
+        padding: 12px 0;
+        z-index: 99999; /* Selalu di paling depan */
+        border-top: 1px solid rgba(255,255,255,0.2); 
     }}
-    .watermark-logo {{
-        width: 35px;
-        height: auto;
-    }}
-    .watermark-text {{
+    
+    .footer-text {{
         font-family: 'Arial', sans-serif;
-        font-size: 12px;
-        font-weight: bold;
-        color: #003366 !important;
+        font-size: 13px; 
+        color: rgba(255, 255, 255, 0.9) !important; 
+        line-height: 1.6;
         margin: 0;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- INJECT HTML WATERMARK ---
-st.markdown(f"""
-    <div class="watermark-container">
-        <img src="data:image/png;base64,{logo_udinus}" class="watermark-logo">
-        <span class="watermark-text">Universitas Dian Nuswantoro</span>
+# --- INJECT HTML FOOTER ---
+st.markdown("""
+    <div class="footer-container">
+        <div class="footer-text">
+            <b>Developed by:</b><br>
+            Muhammad Narendra Bagus Nurseto | Lanangku Kawitan Hafidl Putranto | Reynaldi Saputra
+        </div>
     </div>
 """, unsafe_allow_html=True)
 

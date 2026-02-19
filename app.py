@@ -72,7 +72,7 @@ def generate_excel(df):
     return output.getvalue()
 
 # --- 4. LOAD ASSETS ---
-bg_ombudsman = get_img_as_base64("download.jpg") 
+bg_ombudsman = get_img_as_base64("BYD.jpg") 
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
 logo_udinus = get_img_as_base64("LogoUdinus.png")
 

@@ -72,7 +72,7 @@ def generate_excel(df):
     return output.getvalue()
 
 # --- 4. LOAD ASSETS ---
-bg_ombudsman = get_img_as_base64("BYD.jpg") 
+bg_web = get_img_as_base64("BYD.jpg") 
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
 
 # --- CSS CUSTOM STYLE ---
@@ -86,7 +86,7 @@ st.markdown(f"""
     
     /* 1. BACKGROUND UTAMA */
     .stApp {{
-        background-image: url("data:image/jpeg;base64,{bg_ombudsman}");
+        background-image: url("data:image/jpeg;base64,{bg_web}");
         background-size: cover; 
         background-position: center center;
         background-repeat: no-repeat;
@@ -109,28 +109,42 @@ st.markdown(f"""
 
     /* 3. CONTAINER PUTIH */
     div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: rgba(255, 255, 255, 0.95) !important; 
+        background-color: rgba(15, 23, 42, 0.92) !important; /* Warna Dark Navy 92% (hampir solid) */
         padding: 2rem !important;
         border-radius: 15px !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
-        border: 1px solid rgba(200, 200, 200, 0.5) !important;
-        /* Margin bawah diperbesar agar form tidak tertutup footer */
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important; /* Bayangan kotak lebih tebal */
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
         margin-bottom: 80px !important; 
     }}
 
+    /* Memastikan teks di dalam container berwarna PUTIH TERANG dan diberi bayangan */
     div[data-testid="stVerticalBlockBorderWrapper"] p, 
     div[data-testid="stVerticalBlockBorderWrapper"] h1, 
     div[data-testid="stVerticalBlockBorderWrapper"] h2, 
     div[data-testid="stVerticalBlockBorderWrapper"] h3,
     div[data-testid="stVerticalBlockBorderWrapper"] label,
-    div[data-testid="stVerticalBlockBorderWrapper"] div {{
-        color: #000000 !important;
+    div[data-testid="stVerticalBlockBorderWrapper"] div,
+    div[data-testid="stVerticalBlockBorderWrapper"] span {{
+        color: #ffffff !important;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5); /* Efek bayangan pada teks agar makin jelas */
     }}
     
+    /* Styling Kotak Input / Form agar elegan */
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-        background-color: #f0f2f6 !important; 
-        color: #000000 !important; 
-        border: 1px solid #ccc !important;
+        background-color: rgba(255, 255, 255, 0.1) !important; /* Transparan keputihan */
+        color: #ffffff !important; /* Teks saat mengetik warna putih */
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    }}
+    
+    /* Mengubah warna teks pada tombol Download Excel & tombol lainnya agar terbaca */
+    .stButton button {{
+        background-color: #1A73E8 !important; /* Warna biru tombol */
+        color: white !important;
+        border: none !important;
+    }}
+    .stButton button p {{
+        color: white !important;
+        text-shadow: none !important;
     }}
 
     /* 4. FOOTER NAMA */

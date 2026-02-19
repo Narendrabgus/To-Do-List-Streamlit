@@ -8,7 +8,7 @@ from datetime import datetime, date
 from streamlit_gsheets import GSheetsConnection
 
 # --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Log Aktivitas", layout="wide", page_icon="📝")
+st.set_page_config(page_title="LKPKT Ombudsman", layout="wide", page_icon="📝")
 
 # --- SLOT WAKTU OTOMATIS ---
 TIME_SLOTS = [
@@ -72,11 +72,12 @@ def generate_excel(df):
     return output.getvalue()
 
 # --- 4. LOAD ASSETS ---
-bg_ombudsman = get_img_as_base64("logoOmbudsman.jpeg")
+# bg_ombudsman tidak lagi dipakai sebagai background utama, tapi dibiarkan agar tidak error jika dipanggil
+bg_ombudsman = get_img_as_base64("GambarOmbudsman.jpeg") 
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
 logo_udinus = get_img_as_base64("LogoUdinus.png")
 
-# --- CSS CUSTOM STYLE (Updated Background Zoom & Sidebar Fix) ---
+# --- CSS CUSTOM STYLE ---
 st.markdown(f"""
     <style>
     /* HEADER TRANSPARAN */
@@ -85,18 +86,16 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* 1. BACKGROUND UTAMA */
+    /* 1. BACKGROUND UTAMA (Warna Biru Solid) */
+    /* KITA UBAH BAGIAN INI */
     .stApp {{
-        background-image: url("data:image/jpeg;base64,{bg_ombudsman}");
-        background-size: 100% 100%; 
-        background-position: center center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+        background-image: none !important; /* Hapus gambar */
+        background-color: #1A73E8 !important; /* Ganti dengan warna biru */
     }}
 
-    /* 2. SIDEBAR BACKGROUND (FIXED) */
+    /* 2. SIDEBAR BACKGROUND */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.85) !important;
+        background-color: rgba(255, 255, 255, 0.55) !important;
     }}
     [data-testid="stSidebar"]::before {{
         content: ""; position: absolute; top: 50%; left: 50%;
@@ -105,26 +104,31 @@ st.markdown(f"""
         background-size: contain; background-position: center; background-repeat: no-repeat;
         transform: translate(-50%, -50%) rotate(-90deg);
         z-index: -1; opacity: 0.15;
-        
-        /* INI PERBAIKANNYA: Agar klik mouse tembus ke tombol sidebar */
         pointer-events: none; 
     }}
 
-    /* CONTAINER PUTIH */
-    .main-container {{
-        background-color: rgba(255, 255, 255, 0.92);
-        padding: 2rem;
-        border-radius: 15px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        margin-bottom: 50px;
+    /* 3. CONTAINER BOX (Background putih solid/transparan) */
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        background-color: rgba(255, 255, 255, 0.95) !important; /* Putih 95% */
+        border-radius: 15px !important;
+        padding: 2rem !important;
+        border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    }}
+    
+    /* Memastikan semua teks di dalam container berwarna HITAM */
+    [data-testid="stVerticalBlockBorderWrapper"] * {{
+        color: black !important;
     }}
 
-    /* WARNA TEXT */
-    h1, h2, h3, p, span, div, label {{
+    /* Styling Input Field */
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea {{
+        background-color: #ffffff !important;
         color: #000000 !important;
+        border: 1px solid #ccc !important;
     }}
-
-    /* 3. WATERMARK UDINUS */
+    
+    /* 4. WATERMARK UDINUS */
     .watermark-container {{
         position: fixed;
         bottom: 15px;
@@ -162,7 +166,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- 5. DATABASE OPERATIONS (PERBAIKAN BUG LOGIN) ---
+# --- 5. DATABASE OPERATIONS ---
 def load_logs():
     conn = get_conn()
     try: return conn.read(worksheet="logs", ttl=0)
@@ -171,16 +175,11 @@ def load_logs():
 def load_users():
     conn = get_conn()
     try:
-        # Coba baca data
         df = conn.read(worksheet="users", ttl=0)
-        # Pastikan kolom ada
         if 'username' not in df.columns or 'password' not in df.columns: 
             return pd.DataFrame(columns=["username", "password"])
         return df
     except Exception as e:
-        # TAMPILKAN ERROR DI LAYAR AGAR USER TAHU
-        st.error(f"Gagal koneksi ke Database: {e}. Pastikan file .streamlit/secrets.toml sudah ada.")
-        # Return dataframe kosong (bukan None) agar tidak crash
         return pd.DataFrame(columns=["username", "password"])
 
 def add_data(user, tanggal, waktu, aktivitas, hasil):
@@ -193,13 +192,9 @@ def add_data(user, tanggal, waktu, aktivitas, hasil):
     conn.update(worksheet="logs", data=pd.concat([df_logs, new_row], ignore_index=True))
 
 def create_user(username, password):
-    df_users = load_users() # Load users dulu
-    if df_users.empty: 
-        # Jika kosong, langsung buat baru tanpa cek duplikat (tapi hati-hati)
-        pass 
-    elif username in df_users['username'].values: 
-        return False # Username sudah ada
-    
+    df_users = load_users()
+    if df_users.empty: pass 
+    elif username in df_users['username'].values: return False
     conn = get_conn()
     new_row = pd.DataFrame([{"username": username, "password": password}])
     conn.update(worksheet="users", data=pd.concat([df_users, new_row], ignore_index=True))
@@ -236,10 +231,7 @@ def count_activity_per_day(user, tanggal):
 
 def seed_users_gsheet():
     df_users = load_users()
-    # Jika gagal load (masalah koneksi), jangan lakukan seeding agar tidak error
-    if df_users is None or (df_users.empty and "username" not in df_users.columns): 
-        return
-
+    if df_users is None or (df_users.empty and "username" not in df_users.columns): return
     if df_users.empty or len(df_users) == 0:
         default_users = ["Elisa Luhulima", "Ahmad Sobirin", "Dewi Puspita Sari", "Anni Samudra Wulan", "Nafi Alrasyid", "Muhamad Ichsan Kamil", "Oscar Gideon", "Rafael Yolens Putera Larung", "Izzat Nabela Ali", "Katrin Dian Lestari", "Diah", "Gary", "Rika"]
         pass_hash = make_hashes("123456")
@@ -258,47 +250,49 @@ seed_users_gsheet()
 
 # ================= LOGIN / SIGN UP =================
 if not st.session_state['logged_in']:
-    with st.container():
-        st.markdown('<div class="main-container">', unsafe_allow_html=True)
-        st.title("🔐 Sistem Pencatatan (GSheets)")
-        tab1, tab2 = st.tabs(["Login", "Daftar"])
-        
-        with tab1:
-            u_in = st.text_input("Username", key="l_u")
-            p_in = st.text_input("Password", type="password", key="l_p")
-            if st.button("Masuk"):
-                users = load_users()
-                # Cek apakah users berhasil diload (bukan kosong karena error)
-                if not users.empty and u_in in users['username'].values:
-                    stored_pass = users[users['username']==u_in]['password'].values[0]
-                    if stored_pass == make_hashes(p_in):
-                        st.session_state['logged_in'] = True; st.session_state['username'] = u_in; st.rerun()
-                    else: st.error("Password Salah")
-                else: 
-                    if users.empty: st.error("Gagal memuat database user. Cek koneksi/secrets.toml.")
-                    else: st.error("User tidak ditemukan.")
+    # Menggunakan Layout Kolom untuk menengahkan Form Login
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        # PENTING: Container ini yang akan diberi background putih oleh CSS
+        with st.container(border=True):
+            st.title("LKPKT") 
+            st.markdown("### Laporan Kinerja & Pencatatan Kegiatan Harian")
+            st.divider()
 
-        with tab2:
-            nu = st.text_input("User Baru", key="s_u"); np = st.text_input("Pass Baru", type="password", key="s_p"); npc = st.text_input("Ulangi Pass", type="password", key="s_pc")
-            if st.button("Daftar"):
-                if np == npc and np:
-                    if create_user(nu, make_hashes(np)): st.success("Sukses! Login sekarang.")
-                    else: st.warning("User sudah ada atau Gagal Koneksi.")
-                else: st.error("Password beda / kosong.")
-        st.markdown('</div>', unsafe_allow_html=True)
+            tab1, tab2 = st.tabs(["Login", "Daftar"])
+            
+            with tab1:
+                u_in = st.text_input("Username", key="l_u")
+                p_in = st.text_input("Password", type="password", key="l_p")
+                if st.button("Masuk"):
+                    users = load_users()
+                    if not users.empty and u_in in users['username'].values:
+                        stored_pass = users[users['username']==u_in]['password'].values[0]
+                        if stored_pass == make_hashes(p_in):
+                            st.session_state['logged_in'] = True; st.session_state['username'] = u_in; st.rerun()
+                        else: st.error("Password Salah")
+                    else: 
+                        st.error("User tidak ditemukan atau Gagal Koneksi.")
+
+            with tab2:
+                nu = st.text_input("User Baru", key="s_u"); np = st.text_input("Pass Baru", type="password", key="s_p"); npc = st.text_input("Ulangi Pass", type="password", key="s_pc")
+                if st.button("Daftar"):
+                    if np == npc and np:
+                        if create_user(nu, make_hashes(np)): st.success("Sukses! Login sekarang.")
+                        else: st.warning("User sudah ada atau Gagal Koneksi.")
+                    else: st.error("Password beda / kosong.")
 
 # ================= MAIN APP =================
 else:
     st.sidebar.title(f"Halo, {st.session_state['username']}")
     if st.sidebar.button("Log Out"): st.session_state['logged_in'] = False; st.session_state['username'] = ''; st.rerun()
 
-    # CONTAINER UTAMA
-    with st.container():
-        st.markdown('<div class="main-container">', unsafe_allow_html=True)
-        
-        menu = ["Input Aktivitas", "Laporan & Filter"]
-        choice = st.sidebar.radio("Navigasi", menu)
+    menu = ["Input Aktivitas", "Laporan & Filter"]
+    choice = st.sidebar.radio("Navigasi", menu)
 
+    # CONTAINER UTAMA UNTUK ISI APLIKASI
+    with st.container(border=True):
         if choice == "Input Aktivitas":
             if st.session_state['edit_mode']:
                 st.title("✏️ Edit Aktivitas")
@@ -335,8 +329,12 @@ else:
                             n = 0
                             for d in save_list:
                                 if d['a'] and d['h']: add_data(user, d['t'], d['w'], d['a'], d['h']); n += 1
-                            if n > 0: st.success(f"{n} Data Tersimpan!"); st.session_state['jumlah_input'] = 1; st.rerun()
-                            else: st.error("Isi data dulu.")
+                            if n > 0: 
+                                st.success(f"{n} Data Tersimpan!")
+                                st.session_state['jumlah_input'] = 1
+                                st.rerun()
+                            else: 
+                                st.error("Isi data dulu.")
 
         elif choice == "Laporan & Filter":
             st.title("📊 Laporan")
@@ -344,23 +342,18 @@ else:
             with c1: sd = st.date_input("Dari", date(2025,1,1))
             with c2: ed = st.date_input("Sampai", datetime.now())
             
-            # Ambil data mentah
             raw = get_filtered_logs(st.session_state['username'], sd, ed)
             df = pd.DataFrame(raw, columns=['ID','Tanggal','Waktu','Uraian','Hasil'])
             
             if not df.empty:
-                # --- LOGIKA SORTING EXCEL (Request 1) ---
                 df_excel = df.copy()
                 df_excel['Tanggal_dt'] = pd.to_datetime(df_excel['Tanggal'])
-                # Sort: Tanggal (Ascending/Lama->Baru), Waktu (Ascending)
                 df_excel = df_excel.sort_values(by=['Tanggal_dt', 'Waktu'], ascending=[True, True])
                 df_excel['Tanggal'] = df_excel['Tanggal_dt'].apply(format_indo)
                 
-                # Download Button
                 excel_data = generate_excel(df_excel[['ID','Tanggal','Waktu','Uraian','Hasil']])
                 st.download_button("📥 Download Excel (Terlama di Atas)", excel_data, f"Laporan_Log.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 
-                # --- TAMPILAN WEB (Tetap Terbaru di Atas) ---
                 df['Tanggal_Indo'] = df['Tanggal'].apply(format_indo)
                 gr = df.groupby('Tanggal_Indo', sort=False) 
 
@@ -383,5 +376,3 @@ else:
                                         delete_data(r['ID']); st.toast("Terhapus!"); st.rerun()
                                 st.caption("---")
             else: st.info("Kosong.")
-        
-        st.markdown('</div>', unsafe_allow_html=True)

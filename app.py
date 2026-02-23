@@ -32,6 +32,22 @@ def format_indo(tgl_str):
         return f"{hari[tgl_obj.strftime('%A')]}, {tgl_obj.day} {bulan[tgl_obj.month]} {tgl_obj.year}"
     except: return str(tgl_str)
 
+# Fungsi baru untuk mengembalikan tanggal Indo (Senin, 1 Jan 2025) ke format YYYY-MM-DD
+def reverse_format_indo(tgl_indo):
+    try:
+        # Contoh input: "Rabu, 18 Februari 2026" atau "18 Februari 2026"
+        parts = tgl_indo.replace(',', '').split()
+        if len(parts) == 4: parts = parts[1:] # Buang nama hari jika ada
+        
+        bulan_dict = {'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4, 'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12}
+        
+        day = int(parts[0])
+        month = bulan_dict[parts[1]]
+        year = int(parts[2])
+        return date(year, month, day).strftime('%Y-%m-%d')
+    except:
+        return tgl_indo # Return as is jika gagal (mungkin sudah format YYYY-MM-DD)
+
 def get_img_as_base64(file):
     try:
         with open(file, "rb") as f:
@@ -76,7 +92,6 @@ bg_web = get_img_as_base64("BYD.jpg")
 bg_sidebar = get_img_as_base64("sidebar_bg.webp")
 
 # --- CSS CUSTOM STYLE ---
-# --- CSS CUSTOM STYLE ---
 st.markdown(f"""
     <style>
     /* HEADER TRANSPARAN */
@@ -95,7 +110,6 @@ st.markdown(f"""
     }}
 
     /* 2. SIDEBAR BACKGROUND */
-    /* Membuat sidebar agak gelap agar teks selalu terbaca di light/dark mode */
     [data-testid="stSidebar"] {{
         background-color: rgba(15, 23, 42, 0.7) !important;
     }}
@@ -110,21 +124,19 @@ st.markdown(f"""
     }}
 
     /* ===== PERBAIKAN TEKS GLOBAL (OUTLINE & SHADOW) ===== */
-    /* Memberikan efek outline/shadow tebal pada semua teks di luar container 
-       agar selalu kontras dengan gambar background, baik di Light maupun Dark Mode */
     h1, h2, h3, p, span, div, label {{
         text-shadow: 
             -1px -1px 0 #000,  
              1px -1px 0 #000,
             -1px  1px 0 #000,
              1px  1px 0 #000,
-             0px  2px 5px rgba(0,0,0,0.8) !important; /* Bayangan tebal hitam */
-        color: #ffffff !important; /* Paksa teks jadi putih */
+             0px  2px 5px rgba(0,0,0,0.8) !important;
+        color: #ffffff !important; 
     }}
 
     /* 3. CONTAINER FORM (WARNA GELAP) */
     div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: rgba(15, 23, 42, 0.90) !important; /* Warna Dark Navy Transparan */
+        background-color: rgba(15, 23, 42, 0.90) !important; 
         padding: 2rem !important;
         border-radius: 15px !important;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important; 
@@ -132,7 +144,6 @@ st.markdown(f"""
         margin-bottom: 80px !important; 
     }}
 
-    /* Teks di dalam container tidak perlu outline tebal, cukup shadow tipis */
     div[data-testid="stVerticalBlockBorderWrapper"] p, 
     div[data-testid="stVerticalBlockBorderWrapper"] h1, 
     div[data-testid="stVerticalBlockBorderWrapper"] h2, 
@@ -144,17 +155,16 @@ st.markdown(f"""
     }}
     
     /* Styling Kotak Input / Form */
-    /* Agar kolom input tetap terlihat jelas (kotak abu-abu terang) */
     .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
         background-color: rgba(255, 255, 255, 0.9) !important; 
-        color: #000000 !important; /* Teks saat mengetik = Hitam */
-        text-shadow: none !important; /* Hilangkan shadow di dalam kotak ketik */
+        color: #000000 !important; 
+        text-shadow: none !important; 
         border: 1px solid rgba(255, 255, 255, 0.4) !important;
     }}
     
-    /* Mengubah warna tombol agar menyolok (Download, Login, Tambah) */
+    /* Tombol */
     .stButton button {{
-        background-color: #1A73E8 !important; /* Biru Google */
+        background-color: #1A73E8 !important; 
         color: white !important;
         border: none !important;
         font-weight: bold;
@@ -164,7 +174,7 @@ st.markdown(f"""
         text-shadow: 1px 1px 1px rgba(0,0,0,0.3) !important;
     }}
     .stButton button:hover {{
-        background-color: #1557b0 !important; /* Biru lebih gelap saat disentuh */
+        background-color: #1557b0 !important; 
     }}
 
     /* 4. FOOTER NAMA */
@@ -186,7 +196,7 @@ st.markdown(f"""
         color: rgba(255, 255, 255, 0.9) !important; 
         line-height: 1.6;
         margin: 0;
-        text-shadow: none !important; /* Hilangkan shadow tebal di footer */
+        text-shadow: none !important; 
     }}
 
     .footer-link {{
@@ -280,6 +290,42 @@ def count_activity_per_day(user, tanggal):
     df = df[df['user'] == user]; df['tanggal'] = df['tanggal'].astype(str)
     return len(df[df['tanggal'] == str(tanggal)])
 
+# FUNGSI BARU: Restore/Upload Backup Excel ke Google Sheets
+def restore_data(user, df_uploaded):
+    conn = get_conn()
+    df_logs = load_logs()
+    
+    success_count = 0
+    for _, row in df_uploaded.iterrows():
+        try:
+            # Karena Excel hasil download pake format Tanggal Indo (Rabu, 18 Feb) dan merge cell
+            # Kita pastikan ambil datanya. Pandas baca merged cell dengan mengisi baris pertama, bawahnya NaN/kosong
+            tgl_indo = row['Tanggal']
+            waktu = row['Waktu']
+            aktivitas = row['Uraian Kegiatan']
+            hasil = row['Hasil']
+            
+            if pd.isna(waktu) or pd.isna(aktivitas): continue # Skip baris kosong
+            
+            # Ubah kembali ke YYYY-MM-DD
+            tgl_db = reverse_format_indo(str(tgl_indo))
+            
+            new_id = 1
+            if not df_logs.empty and 'id' in df_logs.columns:
+                df_logs['id'] = pd.to_numeric(df_logs['id'], errors='coerce').fillna(0)
+                if len(df_logs) > 0: new_id = int(df_logs['id'].max()) + 1
+                
+            new_row = pd.DataFrame([{"user": user, "tanggal": tgl_db, "waktu": waktu, "aktivitas": aktivitas, "hasil": hasil, "id": new_id}])
+            df_logs = pd.concat([df_logs, new_row], ignore_index=True)
+            success_count += 1
+        except Exception as e:
+            pass # Skip baris yang error format
+            
+    if success_count > 0:
+        conn.update(worksheet="logs", data=df_logs)
+        return success_count
+    return 0
+
 def seed_users_gsheet():
     df_users = load_users()
     if df_users is None or (df_users.empty and "username" not in df_users.columns): return
@@ -336,7 +382,8 @@ else:
     st.sidebar.title(f"Halo, {st.session_state['username']}")
     if st.sidebar.button("Log Out"): st.session_state['logged_in'] = False; st.session_state['username'] = ''; st.rerun()
 
-    menu = ["Input Aktivitas", "Laporan & Filter"]
+    # TAMBAHAN MENU: Backup & Restore
+    menu = ["Input Aktivitas", "Laporan & Filter", "Backup & Restore"]
     choice = st.sidebar.radio("Navigasi", menu)
 
     with st.container(border=True):
@@ -424,3 +471,38 @@ else:
                                         delete_data(r['ID']); st.toast("Terhapus!"); st.rerun()
                                 st.caption("---")
             else: st.info("Kosong.")
+            
+        # --- TAB BARU: BACKUP & RESTORE ---
+        elif choice == "Backup & Restore":
+            st.title("🗄️ Restore Data dari Excel")
+            st.warning("⚠️ **Perhatian:** Fitur ini digunakan untuk memasukkan kembali data log aktivitas Anda dari file Excel yang pernah di-download sebelumnya. Pastikan format kolom tidak diubah.")
+            
+            uploaded_file = st.file_uploader("Pilih file Laporan_Log.xlsx", type=["xlsx"])
+            
+            if uploaded_file is not None:
+                try:
+                    # Karena merge cell, kita harus pakai parameter ffill() (forward fill) di pandas 
+                    # agar nilai tanggal yang di-merge terisi ke baris bawahnya
+                    df_upload = pd.read_excel(uploaded_file, engine='openpyxl')
+                    
+                    # Cek apakah kolomnya sesuai standar download kita
+                    required_columns = ['Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']
+                    if all(col in df_upload.columns for col in required_columns):
+                        # Forward fill khusus kolom tanggal karena efek merge_range dari xlsxwriter
+                        df_upload['Tanggal'] = df_upload['Tanggal'].ffill()
+                        
+                        st.write("Preview Data yang akan di-restore:")
+                        st.dataframe(df_upload[['Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']].head())
+                        
+                        if st.button("Mulai Restore Data"):
+                            with st.spinner("Sedang menyimpan data ke database..."):
+                                success_count = restore_data(st.session_state['username'], df_upload)
+                                if success_count > 0:
+                                    st.success(f"✅ Berhasil merestore {success_count} aktivitas!")
+                                else:
+                                    st.error("❌ Gagal merestore. Pastikan file tidak kosong dan sesuai format.")
+                    else:
+                        st.error(f"❌ Format file tidak dikenali. Pastikan file memiliki kolom: {', '.join(required_columns)}")
+                        
+                except Exception as e:
+                    st.error(f"Terjadi kesalahan saat membaca file: {e}")

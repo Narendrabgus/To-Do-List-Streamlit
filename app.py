@@ -349,25 +349,35 @@ if not st.session_state['logged_in']:
             tab1, tab2 = st.tabs(["Login", "Daftar"])
             
             with tab1:
-                u_in = st.text_input("Username", key="l_u")
-                p_in = st.text_input("Password", type="password", key="l_p")
-                if st.button("Masuk"):
-                    users = load_users()
-                    if not users.empty and u_in in users['username'].values:
-                        stored_pass = users[users['username']==u_in]['password'].values[0]
-                        if stored_pass == make_hashes(p_in):
-                            st.session_state['logged_in'] = True; st.session_state['username'] = u_in; st.rerun()
-                        else: st.error("Password Salah")
-                    else: 
-                        st.error("User tidak ditemukan atau Gagal Koneksi.")
+                # PERBAIKAN: Menggunakan st.form agar tidak refresh saat mengetik
+                with st.form("form_login"):
+                    u_in = st.text_input("Username", key="l_u")
+                    p_in = st.text_input("Password", type="password", key="l_p")
+                    btn_login = st.form_submit_button("Masuk")
+                    
+                    if btn_login:
+                        users = load_users()
+                        if not users.empty and u_in in users['username'].values:
+                            stored_pass = users[users['username']==u_in]['password'].values[0]
+                            if stored_pass == make_hashes(p_in):
+                                st.session_state['logged_in'] = True; st.session_state['username'] = u_in; st.rerun()
+                            else: st.error("Password Salah")
+                        else: 
+                            st.error("User tidak ditemukan atau Gagal Koneksi.")
 
             with tab2:
-                nu = st.text_input("User Baru", key="s_u"); np = st.text_input("Pass Baru", type="password", key="s_p"); npc = st.text_input("Ulangi Pass", type="password", key="s_pc")
-                if st.button("Daftar"):
-                    if np == npc and np:
-                        if create_user(nu, make_hashes(np)): st.success("Sukses! Silakan kembali ke tab Login.")
-                        else: st.warning("User sudah ada atau Gagal Koneksi.")
-                    else: st.error("Password beda / kosong.")
+                # PERBAIKAN: Menggunakan st.form agar tidak refresh saat pindah kolom
+                with st.form("form_daftar"):
+                    nu = st.text_input("User Baru", key="s_u")
+                    np = st.text_input("Pass Baru", type="password", key="s_p")
+                    npc = st.text_input("Ulangi Pass", type="password", key="s_pc")
+                    btn_daftar = st.form_submit_button("Daftar")
+                    
+                    if btn_daftar:
+                        if np == npc and np:
+                            if create_user(nu, make_hashes(np)): st.success("Sukses! Silakan kembali ke tab Login.")
+                            else: st.warning("User sudah ada atau Gagal Koneksi.")
+                        else: st.error("Password beda / kosong.")
 
 # ================= MAIN APP =================
 else:

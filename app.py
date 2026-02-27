@@ -1,508 +1,216 @@
 import streamlit as st
 import pandas as pd
-import hashlib
-import io
-import xlsxwriter
-import base64
-from datetime import datetime, date
-from streamlit_gsheets import GSheetsConnection
+import plotly.express as px
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
+from datetime import datetime
+from streamlit_gsheets import GSheetsConnection # Library baru untuk GSheets
 
 # --- 1. KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="LKPKT Ombudsman", layout="wide", page_icon="📝")
+st.set_page_config(page_title="Dashboard Keasistenan IV", page_icon="⚖️", layout="wide")
 
-# --- SLOT WAKTU OTOMATIS ---
-TIME_SLOTS = [
-    "08.00 - 10.00", "10.00 - 12.00", "13.00 - 15.00", "15.00 - 17.00"
-]
+# (Masukkan blok CUSTOM CSS Anda yang panjang di sini seperti sebelumnya)
 
-# --- 2. KONEKSI GOOGLE SHEETS ---
-def get_conn():
-    return st.connection("gsheets", type=GSheetsConnection)
+# --- INIT SESSION STATE UNTUK LOGIN ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+    st.session_state['role'] = None
+    st.session_state['username'] = None
 
-# --- 3. HELPER FUNCTIONS ---
-def make_hashes(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
-
-def format_indo(tgl_str):
-    try:
-        if isinstance(tgl_str, str): tgl_obj = datetime.strptime(tgl_str, '%Y-%m-%d').date()
-        else: tgl_obj = tgl_str
-        hari = {'Monday': 'Senin', 'Tuesday': 'Selasa', 'Wednesday': 'Rabu', 'Thursday': 'Kamis', 'Friday': 'Jumat', 'Saturday': 'Sabtu', 'Sunday': 'Minggu'}
-        bulan = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni', 7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
-        return f"{hari[tgl_obj.strftime('%A')]}, {tgl_obj.day} {bulan[tgl_obj.month]} {tgl_obj.year}"
-    except: return str(tgl_str)
-
-# Fungsi baru untuk mengembalikan tanggal Indo (Senin, 1 Jan 2025) ke format YYYY-MM-DD
-def reverse_format_indo(tgl_indo):
-    try:
-        # Contoh input: "Rabu, 18 Februari 2026" atau "18 Februari 2026"
-        parts = tgl_indo.replace(',', '').split()
-        if len(parts) == 4: parts = parts[1:] # Buang nama hari jika ada
+# --- FUNGSI KONEKSI GSHEETS ---
+def get_data_from_gsheets():
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    # Ambil data Laporan
+    df_laporan = conn.read(worksheet="Data_Laporan", ttl=5).dropna(how='all')
+    # Ambil data User
+    df_user = conn.read(worksheet="Data_User", ttl=5).dropna(how='all')
+    
+    # Pastikan tipe data teks untuk df_user agar tidak error saat pencarian
+    if not df_user.empty:
+        df_user = df_user.astype(str)
         
-        bulan_dict = {'Januari': 1, 'Februari': 2, 'Maret': 3, 'April': 4, 'Mei': 5, 'Juni': 6, 'Juli': 7, 'Agustus': 8, 'September': 9, 'Oktober': 10, 'November': 11, 'Desember': 12}
-        
-        day = int(parts[0])
-        month = bulan_dict[parts[1]]
-        year = int(parts[2])
-        return date(year, month, day).strftime('%Y-%m-%d')
-    except:
-        return tgl_indo # Return as is jika gagal (mungkin sudah format YYYY-MM-DD)
+    return df_laporan, df_user, conn
 
-def get_img_as_base64(file):
+# --- HALAMAN LOGIN & SIGN UP ---
+def login_page():
+    st.markdown("<h2 style='text-align: center; color: #003366;'>Sistem Monitoring Keasistenan VI</h2>", unsafe_allow_html=True)
+    
+    # Panggil koneksi ke GSheets
     try:
-        with open(file, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except FileNotFoundError:
-        return ""
-
-def generate_excel(df):
-    output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet('Laporan')
-    header_fmt = workbook.add_format({'bold': True, 'bg_color': '#9bc2e6', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
-    body_fmt = workbook.add_format({'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'left'})
-    center_fmt = workbook.add_format({'text_wrap': True, 'border': 1, 'valign': 'top', 'align': 'center'})
-    date_merge_fmt = workbook.add_format({'text_wrap': True, 'border': 1, 'valign': 'vcenter', 'align': 'center'})
-
-    headers = ['ID', 'Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']
-    for col, h in enumerate(headers): worksheet.write(0, col, h, header_fmt)
-
-    grouped = df.groupby('Tanggal', sort=False)
-    curr_row = 1
-    for date_val, group in grouped:
-        rows = len(group)
-        if rows > 1: worksheet.merge_range(curr_row, 1, curr_row+rows-1, 1, str(date_val), date_merge_fmt)
-        else: worksheet.write(curr_row, 1, str(date_val), center_fmt)
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        df_user = conn.read(worksheet="Data_User", ttl=5).dropna(how='all')
+        if not df_user.empty:
+            df_user = df_user.astype(str)
+    except Exception as e:
+        st.error("Gagal terhubung ke Database User.")
+        st.stop()
         
-        for _, r in group.iterrows():
-            worksheet.write(curr_row, 0, r['ID'], center_fmt)
-            worksheet.write(curr_row, 2, r['Waktu'], center_fmt)
-            worksheet.write(curr_row, 3, r['Uraian'], body_fmt)
-            worksheet.write(curr_row, 4, r['Hasil'], body_fmt)
-            curr_row += 1
+    col1, col2, col3 = st.columns([1, 1.2, 1])
+    with col2:
+        tab_login, tab_signup = st.tabs(["🔐 Login", "📝 Sign Up"])
+        
+        # --- TAB LOGIN ---
+        with tab_login:
+            with st.form("login_form"):
+                input_user = st.text_input("Username")
+                input_pass = st.text_input("Password", type="password")
+                submit_login = st.form_submit_button("Masuk", use_container_width=True)
+                
+                if submit_login:
+                    if df_user.empty:
+                        st.error("Belum ada data pengguna. Silakan Sign Up terlebih dahulu.")
+                    else:
+                        # Cek kecocokan username dan password
+                        user_match = df_user[(df_user['Username'] == input_user) & (df_user['Password'] == input_pass)]
+                        
+                        if not user_match.empty:
+                            st.session_state['logged_in'] = True
+                            st.session_state['role'] = user_match.iloc[0]['Role']
+                            st.session_state['username'] = user_match.iloc[0]['Nama']
+                            st.rerun()
+                        else:
+                            st.error("Username atau Password salah!")
+                            
+        # --- TAB SIGN UP ---
+        with tab_signup:
+            with st.form("signup_form", clear_on_submit=True):
+                new_user = st.text_input("Buat Username")
+                new_pass = st.text_input("Buat Password", type="password")
+                new_nama = st.text_input("Nama Lengkap Asisten")
+                submit_signup = st.form_submit_button("Daftar Akun", use_container_width=True)
+                
+                if submit_signup:
+                    if not new_user or not new_pass or not new_nama:
+                        st.warning("Semua kolom harus diisi!")
+                    elif not df_user.empty and new_user in df_user['Username'].values:
+                        st.error("Username sudah terdaftar! Gunakan username lain.")
+                    else:
+                        # Buat data pengguna baru (Default Role: User)
+                        new_row = pd.DataFrame([{
+                            "Username": new_user,
+                            "Password": new_pass,
+                            "Role": "User",
+                            "Nama": new_nama
+                        }])
+                        
+                        # Gabungkan dan simpan ke GSheets
+                        updated_user_data = pd.concat([df_user, new_row], ignore_index=True) if not df_user.empty else new_row
+                        conn.update(worksheet="Data_User", data=updated_user_data)
+                        
+                        st.success("Akun berhasil dibuat! Silakan pindah ke tab Login untuk masuk.")
 
-    worksheet.set_column('A:A', 5); worksheet.set_column('B:B', 25); worksheet.set_column('C:C', 15)
-    worksheet.set_column('D:D', 50); worksheet.set_column('E:E', 30)
-    workbook.close()
-    return output.getvalue()
+# --- HALAMAN UTAMA (DASHBOARD) ---
+def main_dashboard():
+    # Load Data dari GSheets
+    try:
+        data, df_user, conn = get_data_from_gsheets()
+    except Exception as e:
+        st.error("Gagal terhubung ke Database. Pastikan konfigurasi secrets.toml benar.")
+        st.stop()
 
-# --- 4. LOAD ASSETS ---
-bg_web = get_img_as_base64("BYD.jpg") 
-bg_sidebar = get_img_as_base64("sidebar_bg.webp")
+    # Pastikan format tanggal
+    has_date = False
+    if 'Tanggal Laporan' in data.columns:
+        data['Tanggal Laporan'] = pd.to_datetime(data['Tanggal Laporan'], errors='coerce')
+        has_date = True
 
-# --- CSS CUSTOM STYLE ---
-st.markdown(f"""
-    <style>
-    /* HEADER TRANSPARAN */
-    [data-testid="stHeader"] {{
-        background-color: rgba(0,0,0,0);
-        color: white !important;
-    }}
-    
-    /* 1. BACKGROUND UTAMA */
-    .stApp {{
-        background-image: url("data:image/jpeg;base64,{bg_web}");
-        background-size: cover; 
-        background-position: center center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-
-    /* 2. SIDEBAR BACKGROUND */
-    [data-testid="stSidebar"] {{
-        background-color: rgba(15, 23, 42, 0.7) !important;
-    }}
-    [data-testid="stSidebar"]::before {{
-        content: ""; position: absolute; top: 50%; left: 50%;
-        width: 100vh; height: 100vh;
-        background-image: url("data:image/webp;base64,{bg_sidebar}");
-        background-size: contain; background-position: center; background-repeat: no-repeat;
-        transform: translate(-50%, -50%) rotate(-90deg);
-        z-index: -1; opacity: 0.2;
-        pointer-events: none; 
-    }}
-
-    /* ===== PERBAIKAN TEKS GLOBAL (OUTLINE & SHADOW) ===== */
-    h1, h2, h3, p, span, div, label {{
-        text-shadow: 
-            -1px -1px 0 #000,  
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000,
-             0px  2px 5px rgba(0,0,0,0.8) !important;
-        color: #ffffff !important; 
-    }}
-
-    /* 3. CONTAINER FORM (WARNA GELAP) */
-    div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: rgba(15, 23, 42, 0.90) !important; 
-        padding: 2rem !important;
-        border-radius: 15px !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important; 
-        border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        margin-bottom: 80px !important; 
-    }}
-
-    div[data-testid="stVerticalBlockBorderWrapper"] p, 
-    div[data-testid="stVerticalBlockBorderWrapper"] h1, 
-    div[data-testid="stVerticalBlockBorderWrapper"] h2, 
-    div[data-testid="stVerticalBlockBorderWrapper"] h3,
-    div[data-testid="stVerticalBlockBorderWrapper"] label,
-    div[data-testid="stVerticalBlockBorderWrapper"] div,
-    div[data-testid="stVerticalBlockBorderWrapper"] span {{
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.5) !important; 
-    }}
-    
-    /* Styling Kotak Input / Form */
-    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-        background-color: rgba(255, 255, 255, 0.9) !important; 
-        color: #000000 !important; 
-        text-shadow: none !important; 
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
-    }}
-    
-    /* Tombol */
-    .stButton button {{
-        background-color: #1A73E8 !important; 
-        color: white !important;
-        border: none !important;
-        font-weight: bold;
-    }}
-    .stButton button p {{
-        color: white !important;
-        text-shadow: 1px 1px 1px rgba(0,0,0,0.3) !important;
-    }}
-    .stButton button:hover {{
-        background-color: #1557b0 !important; 
-    }}
-
-    /* 4. FOOTER NAMA */
-    .footer-container {{
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background-color: rgba(0, 0, 0, 0.8);
-        text-align: center; 
-        padding: 12px 0;
-        z-index: 99999; 
-        border-top: 1px solid rgba(255,255,255,0.2); 
-    }}
-    
-    .footer-text {{
-        font-family: 'Arial', sans-serif;
-        font-size: 13px; 
-        color: rgba(255, 255, 255, 0.9) !important; 
-        line-height: 1.6;
-        margin: 0;
-        text-shadow: none !important; 
-    }}
-
-    .footer-link {{
-        color: rgba(255, 255, 255, 0.9) !important;
-        text-decoration: none; 
-        font-weight: bold;
-        transition: color 0.2s ease-in-out;
-        text-shadow: none !important;
-    }}
-
-    .footer-link:hover {{
-        color: #4da6ff !important; 
-        text-decoration: underline; 
-    }}
-    </style>
+    # Header Dashboard
+    st.markdown(f"""
+    <div class="header-container">
+        <h1 class="header-title">⚖️ Dashboard Monitoring Keasistenan Utama VI</h1>
+        <p class="header-subtitle">Selamat datang, {st.session_state['username']} ({st.session_state['role']})</p>
+    </div>
     """, unsafe_allow_html=True)
 
-# --- INJECT HTML FOOTER ---
-st.markdown("""
-    <div class="footer-container">
-        <div class="footer-text">
-            <b>Developed by:</b><br>
-            <a href="https://www.instagram.com/narendraa.baguss?igsh=M2UyY2MwdHc5cWo4" target="_blank" class="footer-link">Muhammad Narendra Bagus Nurseto</a> | 
-            <a href="https://www.instagram.com/hafidputranto_?igsh=MWk3bDZyMm56dWF0OA==" target="_blank" class="footer-link">Lanangku Kawitan Hafidl Putranto</a> | 
-            <a href="https://www.instagram.com/renaldy.sa?igsh=aHJuZTJzMTY1eDA4" target="_blank" class="footer-link">Reynaldi Saputra</a>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-
-# --- 5. DATABASE OPERATIONS ---
-def load_logs():
-    conn = get_conn()
-    try: return conn.read(worksheet="logs", ttl=0)
-    except: return pd.DataFrame(columns=["user", "tanggal", "waktu", "aktivitas", "hasil", "id"])
-
-def load_users():
-    conn = get_conn()
-    try:
-        df = conn.read(worksheet="users", ttl=0)
-        if 'username' not in df.columns or 'password' not in df.columns: 
-            return pd.DataFrame(columns=["username", "password"])
-        return df
-    except Exception as e:
-        return pd.DataFrame(columns=["username", "password"])
-
-def add_data(user, tanggal, waktu, aktivitas, hasil):
-    conn = get_conn(); df_logs = load_logs()
-    new_id = 1
-    if not df_logs.empty and 'id' in df_logs.columns:
-        df_logs['id'] = pd.to_numeric(df_logs['id'], errors='coerce').fillna(0)
-        if len(df_logs) > 0: new_id = int(df_logs['id'].max()) + 1
-    new_row = pd.DataFrame([{"user": user, "tanggal": str(tanggal), "waktu": waktu, "aktivitas": aktivitas, "hasil": hasil, "id": new_id}])
-    conn.update(worksheet="logs", data=pd.concat([df_logs, new_row], ignore_index=True))
-
-def create_user(username, password):
-    df_users = load_users()
-    if df_users.empty: pass 
-    elif username in df_users['username'].values: return False
-    conn = get_conn()
-    new_row = pd.DataFrame([{"username": username, "password": password}])
-    conn.update(worksheet="users", data=pd.concat([df_users, new_row], ignore_index=True))
-    return True
-
-def delete_data(log_id):
-    conn = get_conn(); df_logs = load_logs()
-    df_logs['id'] = pd.to_numeric(df_logs['id'], errors='coerce')
-    conn.update(worksheet="logs", data=df_logs[df_logs['id'] != log_id])
-
-def update_data_log(log_id, tanggal, waktu, aktivitas, hasil):
-    conn = get_conn(); df_logs = load_logs()
-    df_logs['id'] = pd.to_numeric(df_logs['id'], errors='coerce')
-    idx = df_logs.index[df_logs['id'] == log_id].tolist()
-    if idx:
-        df_logs.at[idx[0], 'tanggal'] = str(tanggal); df_logs.at[idx[0], 'waktu'] = waktu
-        df_logs.at[idx[0], 'aktivitas'] = aktivitas; df_logs.at[idx[0], 'hasil'] = hasil
-        conn.update(worksheet="logs", data=df_logs)
-
-def get_filtered_logs(user, start_date, end_date):
-    df = load_logs()
-    if df.empty: return []
-    df = df[df['user'] == user]
-    df['tanggal_dt'] = pd.to_datetime(df['tanggal']).dt.date
-    mask = (df['tanggal_dt'] >= start_date) & (df['tanggal_dt'] <= end_date)
-    df_filtered = df.loc[mask].sort_values(by=['tanggal', 'waktu'], ascending=[False, True])
-    return df_filtered[['id', 'tanggal', 'waktu', 'aktivitas', 'hasil']].values.tolist()
-
-def count_activity_per_day(user, tanggal):
-    df = load_logs(); 
-    if df.empty: return 0
-    df = df[df['user'] == user]; df['tanggal'] = df['tanggal'].astype(str)
-    return len(df[df['tanggal'] == str(tanggal)])
-
-# FUNGSI BARU: Restore/Upload Backup Excel ke Google Sheets
-def restore_data(user, df_uploaded):
-    conn = get_conn()
-    df_logs = load_logs()
-    
-    success_count = 0
-    for _, row in df_uploaded.iterrows():
+    # --- LOGIKA SIDEBAR BERDASARKAN ROLE ---
+    with st.sidebar:
         try:
-            # Karena Excel hasil download pake format Tanggal Indo (Rabu, 18 Feb) dan merge cell
-            # Kita pastikan ambil datanya. Pandas baca merged cell dengan mengisi baris pertama, bawahnya NaN/kosong
-            tgl_indo = row['Tanggal']
-            waktu = row['Waktu']
-            aktivitas = row['Uraian Kegiatan']
-            hasil = row['Hasil']
+            st.image("ombudsman logo.png", width=160)
+        except:
+            st.markdown("**(Logo Ombudsman)**")
+        
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state['logged_in'] = False
+            st.rerun()
             
-            if pd.isna(waktu) or pd.isna(aktivitas): continue # Skip baris kosong
+        st.divider()
+
+        # Gunakan data_filtered untuk grafik agar data aslinya tidak tertimpa
+        data_filtered = data.copy() if not data.empty else pd.DataFrame(columns=["Tanggal Laporan", "Nomor Arsip", "Nama Pelapor", "Lokasi LM", "Asisten", "Status", "Substansi"])
+
+        # LOGIKA ROLE USER: Otomatis filter data miliknya dan Tampilkan Form
+        if st.session_state['role'] == "User":
+            if not data_filtered.empty and 'Asisten' in data_filtered.columns:
+                data_filtered = data_filtered[data_filtered['Asisten'] == st.session_state['username']]
             
-            # Ubah kembali ke YYYY-MM-DD
-            tgl_db = reverse_format_indo(str(tgl_indo))
-            
-            new_id = 1
-            if not df_logs.empty and 'id' in df_logs.columns:
-                df_logs['id'] = pd.to_numeric(df_logs['id'], errors='coerce').fillna(0)
-                if len(df_logs) > 0: new_id = int(df_logs['id'].max()) + 1
+            st.markdown("### 📝 Tambah Laporan Baru")
+            with st.form("form_tambah_laporan", clear_on_submit=True):
+                new_tgl = st.date_input("Tanggal Laporan")
+                new_no = st.text_input("Nomor Arsip / Agenda")
+                new_nama_pelapor = st.text_input("Nama Pelapor")
+                new_lokasi = st.text_input("Lokasi LM")
+                new_status = st.selectbox("Status", ["Proses", "Selesai", "Tutup"])
+                new_substansi = st.selectbox("Substansi", ["Ketenagakerjaan", "Kepegawaian", "Kesehatan", "Jaminan Sosial", "Kesejahteraan Sosial"])
                 
-            new_row = pd.DataFrame([{"user": user, "tanggal": tgl_db, "waktu": waktu, "aktivitas": aktivitas, "hasil": hasil, "id": new_id}])
-            df_logs = pd.concat([df_logs, new_row], ignore_index=True)
-            success_count += 1
-        except Exception as e:
-            pass # Skip baris yang error format
+                btn_simpan = st.form_submit_button("Simpan Data", use_container_width=True)
+                
+                if btn_simpan:
+                    new_laporan = pd.DataFrame([{
+                        "Tanggal Laporan": new_tgl.strftime("%Y-%m-%d"),
+                        "Nomor Arsip": new_no,
+                        "Nama Pelapor": new_nama_pelapor,
+                        "Lokasi LM": new_lokasi,
+                        "Asisten": st.session_state['username'],
+                        "Status": new_status,
+                        "Substansi": new_substansi
+                    }])
+                    
+                    updated_data = pd.concat([data, new_laporan], ignore_index=True) if not data.empty else new_laporan
+                    conn.update(worksheet="Data_Laporan", data=updated_data)
+                    st.success("Data berhasil ditambahkan!")
+                    st.rerun()
+
+        # LOGIKA ROLE ADMIN: Bebas filter semua asisten dari database User
+        elif st.session_state['role'] == "Admin":
+            st.markdown("### 🔎 Pencarian & Filter")
             
-    if success_count > 0:
-        conn.update(worksheet="logs", data=df_logs)
-        return success_count
-    return 0
-
-def seed_users_gsheet():
-    df_users = load_users()
-    if df_users is None or (df_users.empty and "username" not in df_users.columns): return
-    if df_users.empty or len(df_users) == 0:
-        default_users = ["Elisa Luhulima", "Ahmad Sobirin", "Dewi Puspita Sari", "Anni Samudra Wulan", "Nafi Alrasyid", "Muhamad Ichsan Kamil", "Oscar Gideon", "Rafael Yolens Putera Larung", "Izzat Nabela Ali", "Katrin Dian Lestari", "Diah", "Gary", "Rika"]
-        pass_hash = make_hashes("123456")
-        new_data = []; 
-        for u in default_users: new_data.append({"username": u, "password": pass_hash})
-        try: conn = get_conn(); conn.update(worksheet="users", data=pd.DataFrame(new_data)); st.toast("Init Users OK", icon="✅")
-        except: pass
-
-# --- SESSION & INIT ---
-if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
-if 'username' not in st.session_state: st.session_state['username'] = ''
-if 'jumlah_input' not in st.session_state: st.session_state['jumlah_input'] = 1
-if 'edit_mode' not in st.session_state: st.session_state['edit_mode'] = False
-if 'data_to_edit' not in st.session_state: st.session_state['data_to_edit'] = None
-seed_users_gsheet()
-
-# ================= LOGIN / SIGN UP =================
-if not st.session_state['logged_in']:
-    col_center = st.columns([1, 8, 1])
-    with col_center[1]:
-        with st.container(border=True):
-            st.title("LKPKT") 
-            st.markdown("### Laporan Kinerja & Pencatatan Kegiatan Harian")
-            st.divider()
-
-            tab1, tab2 = st.tabs(["Login", "Daftar"])
-            
-            with tab1:
-                u_in = st.text_input("Username", key="l_u")
-                p_in = st.text_input("Password", type="password", key="l_p")
-                if st.button("Masuk"):
-                    users = load_users()
-                    if not users.empty and u_in in users['username'].values:
-                        stored_pass = users[users['username']==u_in]['password'].values[0]
-                        if stored_pass == make_hashes(p_in):
-                            st.session_state['logged_in'] = True; st.session_state['username'] = u_in; st.rerun()
-                        else: st.error("Password Salah")
-                    else: 
-                        st.error("User tidak ditemukan atau Gagal Koneksi.")
-
-            with tab2:
-                nu = st.text_input("User Baru", key="s_u"); np = st.text_input("Pass Baru", type="password", key="s_p"); npc = st.text_input("Ulangi Pass", type="password", key="s_pc")
-                if st.button("Daftar"):
-                    if np == npc and np:
-                        if create_user(nu, make_hashes(np)): st.success("Sukses! Login sekarang.")
-                        else: st.warning("User sudah ada atau Gagal Koneksi.")
-                    else: st.error("Password beda / kosong.")
-
-# ================= MAIN APP =================
-else:
-    st.sidebar.title(f"Halo, {st.session_state['username']}")
-    if st.sidebar.button("Log Out"): st.session_state['logged_in'] = False; st.session_state['username'] = ''; st.rerun()
-
-    # TAMBAHAN MENU: Backup & Restore
-    menu = ["Input Aktivitas", "Laporan & Filter", "Backup & Restore"]
-    choice = st.sidebar.radio("Navigasi", menu)
-
-    with st.container(border=True):
-
-        if choice == "Input Aktivitas":
-            if st.session_state['edit_mode']:
-                st.title("✏️ Edit Aktivitas")
-                dt = st.session_state['data_to_edit']
-                with st.form("edit_form"):
-                    e_tgl = st.date_input("Tanggal", datetime.strptime(dt['tanggal'], '%Y-%m-%d').date())
-                    e_wkt_idx = TIME_SLOTS.index(dt['waktu']) if dt['waktu'] in TIME_SLOTS else 0
-                    e_wkt = st.selectbox("Waktu", TIME_SLOTS, index=e_wkt_idx)
-                    e_akt = st.text_area("Uraian", value=dt['aktivitas']); e_hsl = st.text_area("Hasil", value=dt['hasil'])
-                    if st.form_submit_button("Update Data"):
-                        update_data_log(dt['id'], e_tgl, e_wkt, e_akt, e_hsl)
-                        st.success("Data Diperbarui!"); st.session_state['edit_mode'] = False; st.session_state['data_to_edit'] = None; st.rerun()
-                if st.button("Batal Edit"): st.session_state['edit_mode'] = False; st.session_state['data_to_edit'] = None; st.rerun()
-
+            # Ambil daftar nama asisten langsung dari Data_User (hanya yang role-nya User)
+            if not df_user.empty:
+                daftar_asisten = df_user[df_user['Role'] == 'User']['Nama'].tolist()
+                asisten_list = ["Semua Asisten"] + sorted(daftar_asisten)
             else:
-                st.title("📝 Input Aktivitas")
-                tgl = st.date_input("Pilih Tanggal", datetime.now()); user = st.session_state['username']
-                existing = count_activity_per_day(user, tgl); sisa = len(TIME_SLOTS) - existing
-                if sisa <= 0: st.warning("Slot penuh hari ini.")
-                else:
-                    c_add, c_inf = st.columns([1,4])
-                    with c_add:
-                        if st.button("➕ Tambah"): 
-                            if st.session_state['jumlah_input'] < sisa: st.session_state['jumlah_input'] += 1
-                    with c_inf: st.caption(f"Terisi: {existing}. Sisa: {sisa}")
-                    
-                    with st.form("dyn_form"):
-                        limit = min(st.session_state['jumlah_input'], sisa); save_list = []
-                        for i in range(limit):
-                            slot = TIME_SLOTS[existing + i]; st.markdown(f"**Slot: {slot}**")
-                            a = st.text_area("Uraian", key=f"a_{i}"); h = st.text_area("Hasil", key=f"h_{i}")
-                            save_list.append({"t":tgl, "w":slot, "a":a, "h":h}); st.divider()
-                        if st.form_submit_button("Simpan Semua"):
-                            n = 0
-                            for d in save_list:
-                                if d['a'] and d['h']: add_data(user, d['t'], d['w'], d['a'], d['h']); n += 1
-                            if n > 0: 
-                                st.success(f"{n} Data Tersimpan!")
-                                st.session_state['jumlah_input'] = 1
-                                st.rerun()
-                            else: 
-                                st.error("Isi data dulu.")
+                asisten_list = ["Semua Asisten"]
+                
+            sel_asisten = st.selectbox("👤 Asisten:", asisten_list)
+            
+            if sel_asisten != "Semua Asisten" and not data_filtered.empty and 'Asisten' in data_filtered.columns:
+                data_filtered = data_filtered[data_filtered["Asisten"] == sel_asisten]
+        
+        # Filter Status (Berlaku untuk User & Admin)
+        if not data_filtered.empty and 'Status' in data_filtered.columns:
+            status_list = ["Semua Status"] + sorted(data_filtered["Status"].dropna().unique().tolist())
+            sel_status = st.multiselect("📊 Status:", status_list, default="Semua Status")
+            if "Semua Status" not in sel_status and sel_status:
+                data_filtered = data_filtered[data_filtered["Status"].isin(sel_status)]
 
-        elif choice == "Laporan & Filter":
-            st.title("📊 Laporan")
-            c1, c2 = st.columns(2)
-            with c1: sd = st.date_input("Dari", date(2025,1,1))
-            with c2: ed = st.date_input("Sampai", datetime.now())
-            
-            raw = get_filtered_logs(st.session_state['username'], sd, ed)
-            df = pd.DataFrame(raw, columns=['ID','Tanggal','Waktu','Uraian','Hasil'])
-            
-            if not df.empty:
-                df_excel = df.copy()
-                df_excel['Tanggal_dt'] = pd.to_datetime(df_excel['Tanggal'])
-                df_excel = df_excel.sort_values(by=['Tanggal_dt', 'Waktu'], ascending=[True, True])
-                df_excel['Tanggal'] = df_excel['Tanggal_dt'].apply(format_indo)
-                
-                excel_data = generate_excel(df_excel[['ID','Tanggal','Waktu','Uraian','Hasil']])
-                st.download_button("📥 Download Excel (Terlama di Atas)", excel_data, f"Laporan_Log.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-                
-                df['Tanggal_Indo'] = df['Tanggal'].apply(format_indo)
-                gr = df.groupby('Tanggal_Indo', sort=False) 
+        # Filter Substansi (Berlaku untuk User & Admin)
+        if not data_filtered.empty and 'Substansi' in data_filtered.columns:
+            substansi_list = ["Semua Substansi"] + sorted(data_filtered["Substansi"].dropna().unique().tolist())
+            sel_substansi = st.selectbox("📑 Substansi:", substansi_list)
+            if sel_substansi != "Semua Substansi":
+                data_filtered = data_filtered[data_filtered["Substansi"] == sel_substansi]
 
-                h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 3, 1])
-                h1.markdown('**Tanggal**'); h2.markdown('**Uraian**'); h3.markdown('**Waktu**'); h4.markdown('**Hasil**'); h5.markdown('**Aksi**')
-                
-                for dt_val, g in gr:
-                    with st.container():
-                        st.divider()
-                        cd, cc = st.columns([2, 9])
-                        with cd: st.write(dt_val)
-                        with cc:
-                            for _, r in g.iterrows():
-                                cu, cw, ch, ca = st.columns([3,2,3,1])
-                                cu.write(f"• {r['Uraian']}"); cw.write(r['Waktu']); ch.write(f"• {r['Hasil']}")
-                                with ca:
-                                    if st.button("✏️", key=f"e_{r['ID']}"):
-                                        st.session_state['edit_mode'] = True; st.session_state['data_to_edit'] = {'id': r['ID'], 'tanggal': r['Tanggal'], 'waktu': r['Waktu'], 'aktivitas': r['Uraian'], 'hasil': r['Hasil']}; st.rerun()
-                                    if st.button("🗑️", key=f"d_{r['ID']}"):
-                                        delete_data(r['ID']); st.toast("Terhapus!"); st.rerun()
-                                st.caption("---")
-            else: st.info("Kosong.")
-            
-        # --- TAB BARU: BACKUP & RESTORE ---
-        elif choice == "Backup & Restore":
-            st.title("🗄️ Restore Data dari Excel")
-            st.warning("⚠️ **Perhatian:** Fitur ini digunakan untuk memasukkan kembali data log aktivitas Anda dari file Excel yang pernah di-download sebelumnya. Pastikan format kolom tidak diubah.")
-            
-            uploaded_file = st.file_uploader("Pilih file Laporan_Log.xlsx", type=["xlsx"])
-            
-            if uploaded_file is not None:
-                try:
-                    # Karena merge cell, kita harus pakai parameter ffill() (forward fill) di pandas 
-                    # agar nilai tanggal yang di-merge terisi ke baris bawahnya
-                    df_upload = pd.read_excel(uploaded_file, engine='openpyxl')
-                    
-                    # Cek apakah kolomnya sesuai standar download kita
-                    required_columns = ['Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']
-                    if all(col in df_upload.columns for col in required_columns):
-                        # Forward fill khusus kolom tanggal karena efek merge_range dari xlsxwriter
-                        df_upload['Tanggal'] = df_upload['Tanggal'].ffill()
-                        
-                        st.write("Preview Data yang akan di-restore:")
-                        st.dataframe(df_upload[['Tanggal', 'Waktu', 'Uraian Kegiatan', 'Hasil']].head())
-                        
-                        if st.button("Mulai Restore Data"):
-                            with st.spinner("Sedang menyimpan data ke database..."):
-                                success_count = restore_data(st.session_state['username'], df_upload)
-                                if success_count > 0:
-                                    st.success(f"✅ Berhasil merestore {success_count} aktivitas!")
-                                else:
-                                    st.error("❌ Gagal merestore. Pastikan file tidak kosong dan sesuai format.")
-                    else:
-                        st.error(f"❌ Format file tidak dikenali. Pastikan file memiliki kolom: {', '.join(required_columns)}")
-                        
-                except Exception as e:
-                    st.error(f"Terjadi kesalahan saat membaca file: {e}")
+        st.markdown("---")
+        if st.sidebar.button("🖨️ Cetak Laporan ke PDF"):
+            js = "window.print();"
+            st.components.v1.html(f"<script>{js}</script>", height=0, width=0)
+    
+    # (Lanjutkan dengan kode SECTION 1: KPI METRICS dan grafik lainnya di sini menggunakan variabel 'data_filtered')
+    st.write("Menampilkan", len(data_filtered), "data laporan.")
+    st.dataframe(data_filtered, use_container_width=True)
+
+# --- ROUTER APLIKASI ---
+if not st.session_state['logged_in']:
+    login_page()
+else:
+    main_dashboard()

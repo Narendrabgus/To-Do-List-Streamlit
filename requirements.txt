@@ -1,4 +1,7 @@
 streamlit
 pandas
-xlsxwriter
+plotly
+openpyxl
+geopy
+matplotlib
 st-gsheets-connection
